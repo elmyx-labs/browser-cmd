@@ -1,0 +1,10 @@
+{
+  "name": "browser-cmd",
+  "description": "A real Chrome for Claude, driven from the shell: the operating skill for browser-cmd.",
+  "version": "0.1.0",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/elmyx-labs/browser-cmd",
+  "author": {
+    "name": "elmyx-labs"
+  }
+}

@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # Tests that need Chrome are #[ignore]d and do not run here.
+      - run: cargo test --workspace --locked
+
+  packaging:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The plugin version is the crate version
+        run: test "$(jq -r .version plugin/.claude-plugin/plugin.json)" = "$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
+      - name: The installer is valid POSIX sh
+        run: sh -n install.sh

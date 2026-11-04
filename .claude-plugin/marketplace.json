@@ -1,0 +1,14 @@
+{
+  "name": "browser-cmd",
+  "owner": {
+    "name": "elmyx-labs"
+  },
+  "description": "browser-cmd for Claude Code",
+  "plugins": [
+    {
+      "name": "browser-cmd",
+      "source": "./plugin",
+      "description": "The operating skill for browser-cmd."
+    }
+  ]
+}

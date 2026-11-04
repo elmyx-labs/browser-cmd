@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  # The agent skill shipped in each archive as skills/browser-cmd/SKILL.md (installed for Claude Code, Codex and Pi by install.sh).
+  SKILL: plugin/skills/browser-cmd/SKILL.md
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { targets: x86_64-unknown-linux-musl, os: ubuntu-latest }
+          - { targets: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
+          # Both macOS targets on one arm64 runner: macOS runners are the scarce ones.
+          - { targets: 'aarch64-apple-darwin,x86_64-apple-darwin', os: macos-latest }
+          - { targets: x86_64-pc-windows-msvc, os: windows-latest }
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag is the crate version
+        run: test "${GITHUB_REF_NAME#v}" = "$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
+      - if: contains(matrix.targets, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build and package
+        run: |
+          for target in ${TARGETS//,/ }; do
+            cargo build --release --locked --target "$target"
+            name=browser-cmd-$target
+            mkdir -p "$name/skills/browser-cmd"
+            cp LICENSE README.md "$name/"
+            cp "$SKILL" "$name/skills/browser-cmd/SKILL.md"
+            if [ "$RUNNER_OS" = Windows ]; then
+              cp "target/$target/release/browser-cmd.exe" "$name/"
+              7z a "$name.zip" "$name"
+            else
+              cp "target/$target/release/browser-cmd" "$name/"
+              tar -czf "$name.tar.gz" "$name"
+            fi
+          done
+        env:
+          TARGETS: ${{ matrix.targets }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}
+          path: |
+            browser-cmd-*.tar.gz
+            browser-cmd-*.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum browser-cmd-* > SHA256SUMS
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
