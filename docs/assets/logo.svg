@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="120" viewBox="0 0 560 120" role="img" aria-label="browser-cmd">
+  <rect x="8" y="12" width="96" height="96" rx="22" fill="#0B0D12"/>
+  <circle cx="30" cy="32" r="4" fill="#FFFFFF" opacity="0.55"/>
+  <circle cx="44" cy="32" r="4" fill="#FFFFFF" opacity="0.35"/>
+  <circle cx="58" cy="32" r="4" fill="#FFFFFF" opacity="0.2"/>
+  <path d="M32 56 L50 70 L32 84" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="58" y="78" width="26" height="7" rx="3.5" fill="#FFFFFF"/>
+  <text x="132" y="78" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="54" font-weight="600" letter-spacing="-1" fill="#0B0D12">browser-cmd</text>
+</svg>

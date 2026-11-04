@@ -1,0 +1,10 @@
+{
+  "name": "browser-cmd",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The browser-cmd agent skill as a Pi package (pi install git:github.com/elmyx-labs/browser-cmd); the binary comes from install.sh.",
+  "keywords": ["pi-package"],
+  "pi": {
+    "skills": ["./plugin/skills"]
+  }
+}

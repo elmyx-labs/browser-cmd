@@ -1,0 +1,4 @@
+/target
+.browser-cmd/
+.DS_Store
+/.claude/settings.json
