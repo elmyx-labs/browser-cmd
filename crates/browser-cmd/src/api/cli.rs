@@ -126,29 +126,48 @@ async fn restart() -> Result<()> {
 
 /// Several commands, one per line of stdin, in one call: each but the last
 /// says one line, the last says all it would alone, and the first to fail
-/// stops the rest with its whole answer — the page as it stood at the failure.
+/// stops the rest with its whole answer — the page as it stood at the failure —
+/// and a ledger of the lines done and the lines not run.
 async fn batch() -> Result<()> {
     let script = std::io::read_to_string(std::io::stdin())?;
-    let lines: Vec<Vec<String>> = script
-        .lines()
-        .map(str::trim)
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(|line| words(line.strip_prefix("browser-cmd ").unwrap_or(line)))
-        .collect::<Result<_>>()?;
+    let lines: Vec<&str> =
+        script.lines().map(str::trim).filter(|line| !line.is_empty() && !line.starts_with('#')).collect();
     if lines.is_empty() {
         return Err(Error::Config("batch reads commands, one per line, from stdin".into()));
     }
-    let total = lines.len();
-    for (index, mut argv) in lines.into_iter().enumerate() {
-        if argv.first().is_some_and(|name| name == "batch") {
-            return Err(Error::Config("a batch cannot hold another batch".into()));
-        }
-        if index + 1 < total {
+    let steps: Vec<Vec<String>> = lines
+        .iter()
+        .map(|line| words(line.strip_prefix("browser-cmd ").unwrap_or(line)))
+        .collect::<Result<_>>()?;
+    for (index, mut argv) in steps.into_iter().enumerate() {
+        if index + 1 < lines.len() {
             argv.push("--brief".into());
         }
-        Box::pin(run(&argv)).await?;
+        let ran = match argv.first().is_some_and(|name| name == "batch") {
+            true => Err(Error::Config("a batch cannot hold another batch".into())),
+            false => Box::pin(run(&argv)).await,
+        };
+        if let Err(error) = ran {
+            println!("\n{}", ledger(&lines, index));
+            return Err(error);
+        }
     }
     Ok(())
+}
+
+/// Where a batch stopped: the line that failed, those before it, which must
+/// not be sent again, and those after it as written, to send once it is dealt with.
+fn ledger(lines: &[&str], failed: usize) -> String {
+    let mut ledger = format!("batch stopped at step {} of {}: {}", failed + 1, lines.len(), lines[failed]);
+    if failed > 0 {
+        ledger.push_str("\nDone, do not repeat:");
+        ledger.extend(lines[..failed].iter().enumerate().map(|(at, line)| format!("\n{}. {line}", at + 1)));
+    }
+    if failed + 1 < lines.len() {
+        ledger.push_str("\nNot run:");
+        ledger.extend(lines[failed + 1..].iter().map(|line| format!("\n{line}")));
+    }
+    ledger
 }
 
 /// A line split as a shell would split it: on spaces, except inside quotes.
@@ -277,6 +296,20 @@ mod tests {
         assert_eq!(unwrapped("eval", &untrusted("{\n  \"a\": [\n    1\n  ]\n}")), r#"{"a":[1]}"#);
         assert_eq!(unwrapped("text", &untrusted("URL: x\n\nwords")), "URL: x\n\nwords");
         assert_eq!(unwrapped("eval", "Error: page script failed"), "Error: page script failed");
+    }
+
+    #[test]
+    fn a_stopped_batch_says_what_ran_what_failed_and_what_is_left() {
+        let lines =
+            ["navigate https://a.test/", "type @e1.2 \"New York, NY\"", "click Go", "snapshot", "text"];
+        assert_eq!(
+            ledger(&lines, 2),
+            "batch stopped at step 3 of 5: click Go\nDone, do not repeat:\n1. navigate https://a.test/\n\
+             2. type @e1.2 \"New York, NY\"\nNot run:\nsnapshot\ntext"
+        );
+        assert_eq!(ledger(&lines, 0).lines().nth(1), Some("Not run:"));
+        assert_eq!(ledger(&lines[..1], 0), "batch stopped at step 1 of 1: navigate https://a.test/");
+        assert!(ledger(&lines, 4).ends_with("4. snapshot"));
     }
 
     #[test]

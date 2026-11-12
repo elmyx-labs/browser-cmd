@@ -27,7 +27,7 @@ impl Refs {
             if !self.evidence.iter().any(|reference| reference.handle == handle) {
                 return Err(match self.renamed(target) {
                     Some(now) => format!("{target} was re-rendered by the page; it is now {now}"),
-                    None => format!("{target} is no longer in the current page state; take a fresh snapshot"),
+                    None => format!("{target} is no longer in the current page state"),
                 });
             }
             return Ok(issued.node);
@@ -48,7 +48,7 @@ impl Refs {
                 ),
                 (Some(was), None) => format!(
                     "{target} named the {was} on a page that is gone, and nothing in this page's state \
-                     carries that name; take a snapshot"
+                     carries that name"
                 ),
                 _ => format!("{target} is not a ref in this document; use one from the latest state"),
             });
@@ -91,13 +91,11 @@ impl Refs {
                     .collect();
                 if near.is_empty() {
                     Err(format!(
-                        "nothing in the latest page state is named {target:?}; take a snapshot to see what is \
-                         there, or act by @ref"
+                        "nothing in the latest page state is named {target:?}; act by an @ref it has"
                     ))
                 } else {
                     Err(format!(
-                        "nothing is named exactly {target:?}; the nearest are {}. Use one of these @refs, or \
-                         take a snapshot.",
+                        "nothing is named exactly {target:?}; the nearest are {}. Use one of these @refs.",
                         near.join(", ")
                     ))
                 }

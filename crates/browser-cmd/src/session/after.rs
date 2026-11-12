@@ -1,25 +1,43 @@
 //! What every action ends with: settling, walls, overlays, refusals, PDFs, what
 //! the page draws, and the tab's state with whatever the page newly says.
 
-use crate::Result;
 use crate::chrome::tab::Tab;
+use crate::page::overlay::{Overlay, over_the_page};
 use crate::session::land::{Landed, land};
 use crate::session::pdf::saved_pdf;
+use crate::session::state::State;
 use crate::session::visual::visual;
 use crate::session::{Session, notes};
 use crate::text::fence::bounded_state;
+use crate::{Error, Result};
 
-/// Land the page and gather what happened while nobody asked.
-async fn settle_notes(session: &mut Session, tab: &Tab) -> (Landed, Vec<String>) {
+/// How many times a state is captured again when the page re-rendered under the capture.
+const RECAPTURES: usize = 2;
+
+/// Land the page and gather what happened while nobody asked, and what stands over it.
+async fn settle_notes(session: &mut Session, tab: &Tab) -> (Landed, Vec<String>, Option<Overlay>) {
     let host = session.host.clone();
     let landed = land(&mut session.document.world, tab, &host.settings().waits, &mut session.hand).await;
     let mut notes: Vec<String> =
         tab.cdp.events().take_notes(&tab.session, &tab.target).iter().map(notes::event).collect();
     notes.extend(landed.said.clone());
-    if let Some(over) = crate::page::overlay::over_the_page(&mut session.document.world, tab).await {
-        notes.push(notes::overlay(&over));
+    let over = over_the_page(&mut session.document.world, tab).await;
+    (landed, notes, over)
+}
+
+/// The tab's state, captured again once the page rests when a re-render raced
+/// the capture: the action is done and is never what is repeated.
+async fn captured(session: &mut Session, tab: &Tab) -> Result<State> {
+    let mut left = RECAPTURES;
+    loop {
+        match session.document.state(tab, false, false).await {
+            Err(Error::DocumentChanged) if left > 0 => {
+                left -= 1;
+                session.settle(tab).await;
+            }
+            state => return state,
+        }
     }
-    (landed, notes)
 }
 
 pub(crate) async fn after(session: &mut Session, tab: &Tab, action: &str) -> Result<String> {
@@ -27,7 +45,7 @@ pub(crate) async fn after(session: &mut Session, tab: &Tab, action: &str) -> Res
     // it closed is gone: either way the state is of the tab followed to.
     let (tab, followed) = crate::tabs::follow(session, tab).await?;
     let tab = &tab;
-    let (landed, mut notes) = settle_notes(session, tab).await;
+    let (landed, mut notes, over) = settle_notes(session, tab).await;
     notes.splice(0..0, followed);
     if std::mem::take(&mut session.book.lost) {
         notes.insert(
@@ -37,8 +55,10 @@ pub(crate) async fn after(session: &mut Session, tab: &Tab, action: &str) -> Res
                 .into(),
         );
     }
-    let state = session.document.state(tab, false, false).await?;
+    let state = captured(session, tab).await?;
     let empty = state.empty;
+    // After the state, so each way out is named by the ref that state gave it.
+    notes.extend(over.map(|over| notes::overlay(&over, |name| session.document.refs.only_named(name))));
     let (status, refused) = landed.verdict(&state.address, &state.document);
     notes.extend(session.book.registry.seen(&tab.target, &state.address, &state.title, status));
     notes.extend(refused);

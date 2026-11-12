@@ -39,15 +39,20 @@ impl Command {
     }
 
     /// A lone `{…}` is passed through whole, so anything the shorthand does not
-    /// reach is still sayable.
+    /// reach is still sayable. A refusal ends with the usage line.
     pub(crate) fn arguments(&self, rest: &[String]) -> Result<Value> {
-        if let [only] = rest
-            && only.trim_start().starts_with('{')
-        {
-            return serde_json::from_str(only)
-                .map_err(|error| Error::Config(format!("{}: arguments are not JSON: {error}", self.name)));
-        }
-        (self.parse)(rest)
+        let parsed = match rest {
+            [only] if only.trim_start().starts_with('{') => serde_json::from_str(only)
+                .map_err(|error| Error::Config(format!("{}: arguments are not JSON: {error}", self.name))),
+            _ => (self.parse)(rest),
+        };
+        parsed.map_err(|error| match error {
+            Error::Config(why) => {
+                let usage = format!("browser-cmd {} {}", self.name, self.usage);
+                Error::Config(format!("{why}\nusage: {}", usage.trim_end()))
+            }
+            error => error,
+        })
     }
 }
 
@@ -591,6 +596,14 @@ mod tests {
 
     fn arguments(name: &str, rest: &[String]) -> Result<Value> {
         find(name).unwrap_or_else(|| panic!("no such command: {name}")).arguments(rest)
+    }
+
+    #[test]
+    fn refused_arguments_end_with_the_usage_line() {
+        let refused = arguments("press", &[]).unwrap_err().to_string();
+        assert!(refused.ends_with("\nusage: browser-cmd press KEY"), "{refused}");
+        let refused = arguments("close", &["{".into()]).unwrap_err().to_string();
+        assert!(refused.ends_with("\nusage: browser-cmd close"), "{refused}");
     }
 
     #[test]

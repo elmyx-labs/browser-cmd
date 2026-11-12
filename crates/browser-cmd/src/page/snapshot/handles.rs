@@ -12,6 +12,16 @@ impl Refs {
         self.by_node.get(&node).cloned()
     }
 
+    /// The handle of the one control the latest render showed under this
+    /// name; none when no control or several carry it.
+    pub(crate) fn only_named(&self, name: &str) -> Option<&str> {
+        let mut named = self
+            .evidence
+            .iter()
+            .filter(|reference| reference.name.split_whitespace().eq(name.split_whitespace()));
+        named.next().filter(|_| named.next().is_none()).map(|reference| reference.handle.as_str())
+    }
+
     /// The role the latest render gave this DOM node, if it showed it.
     pub(crate) fn role_for(&self, node: i64) -> Option<&str> {
         self.evidence.get(*self.evidence_by_node.get(&node)?).map(|reference| reference.role.as_str())
@@ -147,6 +157,19 @@ mod tests {
         for name in ["Buy now", "3.5", "v1.2", "a1.0", "@e1a", "e1a.", "E1a.1", "@e.1", "@e-1.1"] {
             assert!(!is_handle(name), "{name}");
         }
+    }
+
+    #[test]
+    fn a_name_gives_its_handle_only_when_one_control_carries_it() {
+        let mut refs = Refs::default();
+        let mut tree = page(10);
+        refs.render(&tree, false, false).unwrap();
+        let name = refs.references()[0].name.clone();
+        assert_eq!(refs.only_named(&format!(" {name} ")), refs.handle_for(10).as_deref());
+        assert_eq!(refs.only_named("no such control"), None);
+        tree.push(("child".into(), "child page".into(), page(20).remove(0).2));
+        refs.render(&tree, false, false).unwrap();
+        assert_eq!(refs.only_named(&name), None, "two controls share the name");
     }
 
     #[test]

@@ -43,6 +43,7 @@ Usage:
   browser-cmd restart              stop the daemon and start it with the current settings
   browser-cmd batch <<'EOF'        several commands, one per line, in one call: each
                                    but the last says one line, the first failure stops
+                                   and lists the lines done and the lines not run
   browser-cmd --serve [ADDR]       run the daemon in the foreground, in its workspace
   browser-cmd <command> --help     one command's syntax
 

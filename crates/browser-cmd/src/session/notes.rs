@@ -52,8 +52,9 @@ pub(crate) fn refused(document: &Value) -> Option<String> {
     })
 }
 
-/// What is over the page and the ways out it offers.
-pub(crate) fn overlay(over: &Overlay) -> String {
+/// What is over the page and the ways out it offers, each with the ref
+/// `handle` finds for its name.
+pub(crate) fn overlay<'a>(over: &Overlay, handle: impl Fn(&str) -> Option<&'a str>) -> String {
     let kind = if over.modal { "A dialog" } else { "Something" };
     let what = match over.what.is_empty() {
         true => String::new(),
@@ -61,7 +62,17 @@ pub(crate) fn overlay(over: &Overlay) -> String {
     };
     let choices = match over.choices.is_empty() {
         true => " It offers no way out that this can see.".to_owned(),
-        false => format!(" It offers: {}.", over.choices.join(", ")),
+        false => {
+            let choices: Vec<String> = over
+                .choices
+                .iter()
+                .map(|choice| match handle(choice) {
+                    Some(handle) => format!("{choice} @{handle}"),
+                    None => choice.clone(),
+                })
+                .collect();
+            format!(" It offers: {}.", choices.join(", "))
+        }
     };
     format!("{kind} is over the page{what}.{choices} Answer it before the page beneath it.")
 }
@@ -137,6 +148,18 @@ fn describe(wall: &Wall) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_overlay_names_each_way_out_by_its_ref_when_it_has_one() {
+        let over =
+            Overlay { what: "Cookies".into(), choices: vec!["Accept".into(), "×".into()], modal: true };
+        assert_eq!(
+            overlay(&over, |name| (name == "Accept").then_some("e1a.3")),
+            "A dialog is over the page — \"Cookies\". It offers: Accept @e1a.3, ×. Answer it before the page \
+             beneath it."
+        );
+        assert!(overlay(&over, |_| None).contains("It offers: Accept, ×."));
+    }
 
     #[test]
     fn a_download_is_said_on_one_line_whatever_the_page_named_it() {

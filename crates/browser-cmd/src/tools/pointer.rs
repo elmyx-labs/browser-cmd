@@ -44,8 +44,8 @@ pub(crate) async fn click(session: &mut Session, args: Value) -> Result<String> 
         && let Some(cover) = covered_by(session, &tab, node, x, y).await?
     {
         return Err(Error::Tool(format!(
-            "the target moved before the click landed — {cover} is under the cursor now; \
-             take a fresh snapshot and try again"
+            "the target moved before the click landed — {cover} is under the cursor now, and \
+             nothing was clicked"
         )));
     }
     if args.right {

@@ -189,8 +189,17 @@ fn a_ref_from_one_command_process_clicks_in_the_next() {
         cli_with(&dir, &addr, &home, &["batch"], &format!("navigate http://{page}\nback\nsnapshot\n"));
     assert!(batched.starts_with("navigate: Navigated."), "batch: {batched}");
     assert!(batched.contains("Go onward") && batched.contains(" @e"), "the last step is whole: {batched}");
-    let (_, failed) = cli_with(&dir, &addr, &home, &["batch"], "click \"No such control\"\nsnapshot\n");
+    let script = format!("navigate http://{page}\nclick \"No such control\"\nsnapshot\ntext\n");
+    let (said, failed) = cli_with(&dir, &addr, &home, &["batch"], &script);
     assert!(failed.contains("No such control"), "the first failure stops the batch: {failed}");
+    let ledger = format!(
+        "\n\nbatch stopped at step 2 of 4: click \"No such control\"\nDone, do not repeat:\n\
+         1. navigate http://{page}\nNot run:\nsnapshot\ntext\n"
+    );
+    assert!(said.ends_with(&ledger), "a stopped batch ends with its ledger: {said}");
+    assert!(said.contains("\n\nPage now.\n<browser-state"), "the failed step ends with the page: {said}");
+    let (_, refused) = cli_with(&dir, &addr, &home, &["press"], "");
+    assert!(refused.contains("usage: browser-cmd press KEY"), "{refused}");
 
     // Stop this run's daemon by verifying its full command line and PID.
     let _ = cli(&dir, &addr, &home, &["close"]);

@@ -34,6 +34,9 @@ pub(crate) use output::{Image, Outcome};
 pub(crate) type Run =
     for<'a> fn(&'a mut Session, Value) -> Pin<Box<dyn Future<Output = Result<String>> + 'a>>;
 
+/// The commands that only read the page, so one that raced a re-render is run again.
+const READS: &[&str] = &["snapshot", "text", "images", "markup", "extract", "evidence", "verify"];
+
 /// How many left tabs' documents a session keeps.
 const PARKED: usize = 16;
 
@@ -47,6 +50,8 @@ pub(crate) struct Session {
     pub(crate) hand: Hand,
     pub(crate) output: Output,
     awareness: Awareness,
+    /// The running command named an element the document does not have.
+    missed: std::cell::Cell<bool>,
     /// When its last command finished, so an idle session can be let go.
     pub(crate) used: std::time::Instant,
     /// `close` ended it: its slot is free.
@@ -81,6 +86,7 @@ impl Session {
             document: Document::new(),
             parked: std::collections::HashMap::new(),
             output: Output::new(),
+            missed: std::cell::Cell::new(false),
             used: std::time::Instant::now(),
             ended: false,
             host,
@@ -114,6 +120,7 @@ impl Session {
         args: Value,
     ) -> Outcome {
         self.output.picture = None;
+        self.missed.set(false);
         let revision = self.document.refs.revision();
         let asked = args.to_string();
         // What is open before an action that may open or close a tab; after()
@@ -124,7 +131,15 @@ impl Session {
                 "acting on {host} is outside the sites allowed ({}); the page can be read, not acted on",
                 self.host.settings().sites.join(", ")
             ))),
-            None => run(self, args).await,
+            None => match run(self, args.clone()).await {
+                Err(Error::DocumentChanged) if READS.contains(&name) => {
+                    if let Some(tab) = self.book.active.clone() {
+                        self.settle(&tab).await;
+                    }
+                    run(self, args).await
+                }
+                result => result,
+            },
         };
         if let (Ok(output), Some(tab)) = (&mut result, self.book.active.clone())
             && let Ok((_, notes)) = crate::tabs::follow(self, &tab).await
@@ -157,6 +172,16 @@ impl Session {
             ));
         }
         output.extend(restored.iter().map(|note| format!("\n{note}")));
+        // A failure that leaves the caller needing to look again ends with the
+        // look: the page as it stands, with the refs to go on with. Not after
+        // `wait`, whose answer is owed within the time it was given.
+        if let Err(Error::Tool(_) | Error::Cdp(_) | Error::Timeout(_) | Error::DocumentChanged) = &result
+            && (changing && !matches!(name, "eval" | "wait") || name == "hover" || self.missed.get())
+            && let Some(tab) = self.book.active.clone()
+            && let Ok(state) = after(self, &tab, "Page now").await
+        {
+            output.push_str(&format!("\n\n{state}"));
+        }
         self.book.save();
         self.used = std::time::Instant::now();
         if let Some(awareness) = awareness {
@@ -208,20 +233,16 @@ impl Session {
 
     /// The node a ref or a visible name addresses in the current document.
     pub(crate) fn node(&self, target: &str) -> Result<i64> {
-        self.document.resolve(self.book.active.as_ref(), target, &[])
+        self.resolve(target, &[])
     }
 
     /// An element to put text into.
     pub(crate) fn field(&self, target: &str) -> Result<i64> {
-        self.document.resolve(
-            self.book.active.as_ref(),
-            target,
-            &["textbox", "searchbox", "combobox", "spinbutton"],
-        )
+        self.resolve(target, &["textbox", "searchbox", "combobox", "spinbutton"])
     }
 
     pub(crate) fn resolve(&self, target: &str, roles: &[&str]) -> Result<i64> {
-        self.document.resolve(self.book.active.as_ref(), target, roles)
+        self.document.resolve(self.book.active.as_ref(), target, roles).inspect_err(|_| self.missed.set(true))
     }
 }
 

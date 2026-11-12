@@ -191,9 +191,13 @@ async fn real_chrome_names_what_stands_over_the_page_without_answering_it() {
             "it was not named by what it calls itself: {}",
             opened.output
         );
-        assert!(
-            opened.output.contains("Accept all, Reject all, Manage settings"),
-            "its choices were not offered in order: {}",
+        let offered = opened.output.lines().find(|line| line.contains("It offers: ")).unwrap_or_default();
+        let named: Vec<&str> =
+            offered.split("@e").map(|part| part.rsplit([':', ',']).next().unwrap().trim()).collect();
+        assert_eq!(
+            named[..3],
+            ["Accept all", "Reject all", "Manage settings"],
+            "its choices were not offered in order, each with its ref: {}",
             opened.output
         );
 
@@ -207,6 +211,49 @@ async fn real_chrome_names_what_stands_over_the_page_without_answering_it() {
         assert!(clicked.ok, "{}", clicked.output);
         let after = session.execute("eval", json!({ "expression": "document.body.dataset.chose" })).await;
         assert!(after.output.contains("none"), "{}", after.output);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_failed_click_on_a_covered_element_ends_with_the_page_and_the_covers_ref() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <button onclick="document.body.dataset.bought='yes'">Buy</button>"#
+            .to_owned(),
+    );
+    on_page(address, async |session, opened| {
+        let buy = opened
+            .output
+            .lines()
+            .find(|line| line.contains("\"Buy\""))
+            .and_then(|line| line.split_whitespace().find(|word| word.starts_with("@e")))
+            .expect("the button has a ref")
+            .to_owned();
+        let cover = "document.body.insertAdjacentHTML('beforeend', '<div style=\"position:fixed;inset:0;\
+                     z-index:9;background:#fff\"><h2>Cookies</h2><button>Accept</button></div>'); 1";
+        let covered = session.execute("eval", json!({ "expression": cover })).await;
+        assert!(covered.ok, "{}", covered.output);
+
+        let clicked = session.execute("click", json!({ "ref": buy })).await;
+        assert!(!clicked.ok && clicked.error.as_deref() == Some("tool"), "{}", clicked.output);
+        let (error, page) = clicked.output.split_once("\n\nPage now.").expect("the page follows the error");
+        assert!(error.starts_with("Error: ") && error.contains("is covered by"), "{error}");
+        let accept = page
+            .lines()
+            .find(|line| line.contains("button \"Accept\""))
+            .and_then(|line| line.split_whitespace().find(|word| word.starts_with("@e")))
+            .unwrap_or_else(|| panic!("the cover's button has no ref in the state: {page}"));
+        assert!(page.contains(&format!("It offers: Accept {accept}.")), "{page}");
+
+        assert!(session.execute("click", json!({ "ref": accept })).await.ok, "the ref from the failure acts");
+        let stale = session.execute("text", json!({ "ref": "@e1.1" })).await;
+        let (error, page) =
+            stale.output.split_once("\n\nPage now.").expect("a missed ref ends with the page");
+        assert!(!stale.ok && error.contains("@e1.1") && page.contains("<browser-state"), "{}", stale.output);
+        let unmet = session.execute("verify", json!({ "text": "no such words" })).await;
+        assert!(!unmet.ok && !unmet.output.contains("Page now."), "{}", unmet.output);
     })
     .await;
 }

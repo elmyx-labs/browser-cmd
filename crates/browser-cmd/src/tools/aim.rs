@@ -72,8 +72,7 @@ async fn aim_in(session: &mut Session, tab: &Tab, node: i64, rect: Rect) -> Resu
     let (x, y) = session.hand.point_in(rect);
     if let Some(cover) = covered_by(session, tab, node, x, y).await? {
         return Err(Error::Tool(format!(
-            "element is covered by {cover}; clear it first — click it, press Escape, scroll, \
-             or take a fresh snapshot to find it (a pop-up that arrived after the last one has no ref yet)"
+            "element is covered by {cover}; clear it first — click it, press Escape or scroll"
         )));
     }
     Ok((x, y))
