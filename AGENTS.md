@@ -33,6 +33,15 @@ BROWSER_CMD_HEADLESS=1 cargo test --workspace --locked -- --include-ignored --sk
 - `plugin/` the Claude Code plugin; `.claude-plugin/marketplace.json` lists it.
 - `docs/` user documentation; `install.sh` and `install.ps1` the installers; `.github/workflows/` CI and releases.
 
+## Branches
+
+- `main` holds releases only: every commit on it is a released, tagged version, and the installers and the
+  README's install line read from it. Nothing is committed to `main` directly.
+- `develop` is where work lands. A change is a branch off `develop` (`improve/…`, `fix/…`) merged back into
+  it once the checks above pass.
+- A release is `develop` merged into `main` with the version bumped and tagged `vX.Y.Z`; the tag starts the
+  release workflow.
+
 ## Conventions
 
 - Minimal code: the fewest lines that do the job. Remove dead code; do not comment it out.
