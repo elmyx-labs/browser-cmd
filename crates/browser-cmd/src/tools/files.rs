@@ -1,8 +1,13 @@
 //! Upload: handing a page a file from inside the workspace.
 
+use std::time::Duration;
+
 use serde_json::Value;
 
+use crate::chrome::tab::Tab;
+use crate::page::js::FILE_INPUT;
 use crate::session::{Session, after};
+use crate::tools::aim::aim;
 use crate::tools::args::args;
 use crate::{Error, Result};
 
@@ -11,8 +16,41 @@ pub(crate) async fn upload(session: &mut Session, args: Value) -> Result<String>
     let node = session.node(&args.r#ref)?;
     let path = inside(&session.settings().workspace, &args.path)?;
     let tab = session.current().await?;
+    choose(session, &tab, node).await?;
     crate::page::dom::set_files(&tab, node, &path).await?;
     after(session, &tab, "Attached the file").await
+}
+
+/// How long a click on a file input gets to ask for its file.
+const CHOOSER: Duration = Duration::from_secs(2);
+
+/// Click the input and take a person's moment over the chooser, where the
+/// input is one a person could click: a file that appears in an input nobody
+/// clicked is one no person put there. The chooser itself is kept from
+/// opening. An input the page hides behind a button of its own is left to be
+/// handed its file directly.
+async fn choose(session: &mut Session, tab: &Tab, node: i64) -> Result<()> {
+    if session.document.world.call_on(tab, node, FILE_INPUT, Vec::new()).await? != Value::Bool(true) {
+        return Ok(());
+    }
+    let Ok((x, y)) = aim(session, tab, node).await else { return Ok(()) };
+    crate::page::dom::intercept_chooser(tab, true).await?;
+    let clicked = session.hand.click(tab, x, y).await;
+    let asked = tokio::time::Instant::now() + CHOOSER;
+    let mut opened = false;
+    while clicked.is_ok() && !opened && tokio::time::Instant::now() < asked {
+        opened = tab.cdp.events().chooser_opened(&tab.session);
+        if !opened {
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
+    let released = crate::page::dom::intercept_chooser(tab, false).await;
+    clicked?;
+    released?;
+    if opened {
+        session.hand.think().await;
+    }
+    Ok(())
 }
 
 /// `join` on an absolute path throws the workspace away and `..` walks out of

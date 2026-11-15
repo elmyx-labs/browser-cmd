@@ -272,3 +272,50 @@ async fn caller_globals_cannot_poison_helpers_or_another_session() {
     })
     .await;
 }
+
+/// What a page can check in a moment, each of which once told this browser
+/// from one a person opened: the APIs a launch flag removed, the browser a
+/// frame from another site names, and
+/// what a click and a capital letter look like to the page's own listeners.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn a_page_sees_the_browser_and_the_hand_an_ordinary_chrome_shows() {
+    let page = r#"<!doctype html><button id="b">Press</button><input aria-label="Field"><script>
+        const seen = { keys: [], frames: [] };
+        if (top === self) {
+            addEventListener('pointerdown', e => Object.assign(seen, { pressure: e.pressure, buttons: e.buttons }));
+            addEventListener('keydown', e => seen.keys.push(e.key));
+            addEventListener('message', e => seen.frames.push(e.data));
+            document.body.append(Object.assign(document.createElement('iframe'), { src: location.href.replace('127.0.0.1', 'localhost') }));
+        } else parent.postMessage(navigator.userAgent, '*');
+    </script>"#;
+    let address = serve(page.to_owned());
+    on_page_with(
+        address,
+        |settings| settings.pace = 1.0,
+        async |session, _| {
+            assert!(session.execute("click", json!({"ref":"Press"})).await.ok);
+            assert!(session.execute("type", json!({"ref":"Field","text":"A#"})).await.ok);
+            // In the page's own world, where its listeners keep what they saw.
+            let tab = session.current().await.unwrap();
+            let read = tab
+                .call("Runtime.evaluate", json!({"awaitPromise": true, "returnByValue": true, "expression": r#"(async () => ({ ...seen,
+                    ua: navigator.userAgent, notification: typeof Notification, push: 'PushManager' in window, webdriver: navigator.webdriver,
+                    widevine: await navigator.requestMediaKeySystemAccess('com.widevine.alpha', [{ initDataTypes: ['cenc'],
+                        videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }] }]).then(() => true, () => false) }))()"#}))
+                .await
+                .unwrap();
+            let seen = &read["result"]["value"];
+            assert_eq!(seen["notification"], "function", "{seen}");
+            assert_eq!(seen["push"], true, "{seen}");
+            assert_eq!(seen["webdriver"], false, "{seen}");
+            assert_eq!(seen["widevine"], true, "{seen}");
+            assert_eq!((&seen["pressure"], &seen["buttons"]), (&json!(0.5), &json!(1)), "{seen}");
+            assert_eq!(seen["keys"], json!(["Shift", "A", "Shift", "#"]), "a capital and a symbol press Shift first");
+            let ua = seen["ua"].as_str().unwrap();
+            assert!(!ua.contains("Headless"), "{seen}");
+            assert_eq!(seen["frames"], json!([ua]), "a frame from another site: {seen}");
+        },
+    )
+    .await;
+}

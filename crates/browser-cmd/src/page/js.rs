@@ -22,6 +22,7 @@ scripts! {
     EVIDENCE = "evidence.js";
     EXTRACT = "extract.js";
     FIELD_VALUE = "field_value.js";
+    FILE_INPUT = "file_input.js";
     IMAGES = "images.js";
     LIST = "list.js";
     LOCATE = "locate.js";

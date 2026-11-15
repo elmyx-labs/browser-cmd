@@ -110,13 +110,19 @@ fn output(command: &mut std::process::Command) -> Option<String> {
     Some(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-/// The WebSocket endpoint of a Chrome running on this profile, from the file
-/// Chrome keeps it in; stale after a Chrome that was killed, which the
-/// connection then finds out.
+/// Where a launch notes the WebSocket endpoint Chrome gave it, beside Chrome's
+/// own files: Chrome notes its port itself only when it was left to pick one.
+pub(crate) const ENDPOINT: &str = "browser-cmd-endpoint";
+
+/// The WebSocket endpoint of the Chrome launched on this profile, if it still
+/// runs. The note outlives a Chrome that was killed, and its port may by now
+/// be another browser's: the endpoint carries an id no other Chrome has, so
+/// only the very one that was launched answers to it.
 pub(crate) async fn active_port(profile: &Path, patience: Duration) -> Option<String> {
-    let noted = std::fs::read_to_string(profile.join("DevToolsActivePort")).ok()?;
-    let port: u16 = noted.lines().next()?.trim().parse().ok()?;
-    debugger_url(&format!("http://127.0.0.1:{port}"), patience).await.ok()
+    let noted = std::fs::read_to_string(profile.join(ENDPOINT)).ok()?;
+    let port = url::Url::parse(noted.trim()).ok()?.port()?;
+    let answers = debugger_url(&format!("http://127.0.0.1:{port}"), patience).await.ok()?;
+    (answers == noted.trim()).then_some(answers)
 }
 
 /// Chrome's WebSocket endpoint, asked of its HTTP one. Chrome answers and

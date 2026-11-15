@@ -98,7 +98,13 @@ impl Tab {
     /// Whether the page is told it has the focus, as the one page a person is
     /// working in has while the rest of their windows do not.
     pub(crate) async fn emulate_focus(&self, enabled: bool) -> Result<()> {
-        self.call("Emulation.setFocusEmulationEnabled", json!({ "enabled": enabled })).await.map(drop)
+        self.call("Emulation.setFocusEmulationEnabled", json!({ "enabled": enabled })).await?;
+        let mut events = self.cdp.events();
+        match enabled {
+            true => events.focused = Some((self.target.clone(), self.session.clone())),
+            false => drop(events.focused.take_if(|(target, _)| *target == self.target)),
+        }
+        Ok(())
     }
 }
 

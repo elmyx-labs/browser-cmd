@@ -105,6 +105,8 @@ async fn insert(session: &mut Session, tab: &Tab, text: &str) -> Result<()> {
         if index > 0 {
             crate::input::keys::press(tab, &mut session.hand, "Enter").await?;
         }
+        // A line break written as two characters is still one.
+        let line = line.strip_suffix('\r').unwrap_or(line);
         if !line.is_empty() {
             Hand::insert(tab, line).await?;
         }
@@ -145,6 +147,7 @@ pub(crate) async fn enter(
         .await
         .map_err(|error| Error::Tool(format!("cannot type into {reference}: {error}")))?;
     session.hand.click(tab, x, y).await?;
+    session.hand.pause(crate::input::hand::tempo::TO_THE_KEYS).await;
     // Clear what is there before typing — nothing when it is empty, where
     // Backspace takes a multi-select's last choice away. A contenteditable is
     // cleared with a script: selecting it and pressing Backspace hangs the key

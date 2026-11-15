@@ -13,12 +13,14 @@ pub(crate) struct Screen {
     pub(crate) scale: f64,
     pub(crate) menubar: u32,
     pub(crate) taskbar: u32,
+    /// Bits per pixel: a Mac's own display is a wide-gamut one.
+    pub(crate) depth: u32,
 }
 
 pub(crate) const SCREEN: Screen = if cfg!(target_os = "macos") {
-    Screen { size: (1512, 982), scale: 2.0, menubar: 33, taskbar: 99 }
+    Screen { size: (1512, 982), scale: 2.0, menubar: 33, taskbar: 98, depth: 30 }
 } else {
-    Screen { size: (1920, 1080), scale: 1.0, menubar: 0, taskbar: 48 }
+    Screen { size: (1920, 1080), scale: 1.0, menubar: 0, taskbar: 48, depth: 24 }
 };
 
 /// What every launched Chrome is told, beside what the settings add.
@@ -26,36 +28,35 @@ const ARGUMENTS: &[&str] = &[
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-search-engine-choice-screen",
-    "--disable-notifications",
     // An agent reads pages; it never listens. Autoplaying media would play
     // through the person's speakers, headless or not.
     "--mute-audio",
     // Quiet the parts of Chrome that phone home or pop a bubble, none of which
     // a driven browser wants, several of which are a tell.
     "--no-service-autorun",
-    "--no-pings",
     "--disable-breakpad",
     "--disable-session-crashed-bubble",
     "--disable-infobars",
     // Small /dev/shm on a Linux server or in Docker crashes a renderer.
     "--disable-dev-shm-usage",
-    // Cross-origin iframes render in the page's own process, so a frame is read
-    // like any same-site one, and no frame target has to be auto-attached to.
-    // A fresh profile would also fetch Chrome's own models and components,
-    // ~45 MB each time, through a metered proxy when there is one.
+    // Cross-origin iframes render in the page's own process where Chrome
+    // allows it, so a frame is read like any same-site one and carries the
+    // page's identity; the ones Chrome still gives a process are given it as
+    // they start (`chrome::events`).
+    // A fresh profile would also fetch Chrome's own models, ~45 MB each time,
+    // through a metered proxy when there is one. Its components stay: without
+    // them Widevine is gone, which a page can ask about.
     "--disable-features=IsolateOrigins,site-per-process,OptimizationGuideModelDownloading,OptimizationHintsFetching,OptimizationTargetPrediction,OptimizationHints",
-    "--disable-component-update",
     // The system keychain would otherwise ask the person, mid-turn.
     if cfg!(target_os = "macos") { "--use-mock-keychain" } else { "--password-store=basic" },
 ];
 
-pub(super) fn arguments(settings: &Settings, proxy: Option<SocketAddr>) -> Vec<String> {
+/// `port` is where Chrome listens for DevTools. A port Chrome picks itself
+/// (`0`) sets `navigator.webdriver`, as headless does; a named one does not.
+pub(super) fn arguments(settings: &Settings, proxy: Option<SocketAddr>, port: u16) -> Vec<String> {
     let mut args = vec![
-        "--remote-debugging-port=0".to_owned(),
+        format!("--remote-debugging-port={port}"),
         format!("--user-data-dir={}", settings.profile.display()),
-        // Without it Chrome sets `navigator.webdriver`, which no ordinary
-        // user's browser does.
-        "--disable-blink-features=AutomationControlled".to_owned(),
         // Native process configuration reaches headed pages and workers too.
         format!("--accept-lang={}", settings.language),
     ];
@@ -91,12 +92,17 @@ pub(super) fn arguments(settings: &Settings, proxy: Option<SocketAddr>) -> Vec<S
         let screen = (SCREEN.size.0.max(settings.window.0), SCREEN.size.1.max(settings.window.1));
         args.extend([
             "--headless=new".into(),
+            // Headless sets `navigator.webdriver`, which no ordinary user's
+            // browser does. Only here: where a window is shown the flag puts
+            // a warning bar across it, which shortens the page and is seen.
+            "--disable-blink-features=AutomationControlled".into(),
             format!("--window-size={},{}", settings.window.0, settings.window.1),
             format!(
-                "--screen-info={{{}x{} devicePixelRatio={} workAreaTop={} workAreaBottom={}}}",
+                "--screen-info={{{}x{} devicePixelRatio={} colorDepth={} workAreaTop={} workAreaBottom={}}}",
                 device(screen.0),
                 device(screen.1),
                 SCREEN.scale,
+                SCREEN.depth,
                 device(SCREEN.menubar),
                 device(SCREEN.taskbar)
             ),

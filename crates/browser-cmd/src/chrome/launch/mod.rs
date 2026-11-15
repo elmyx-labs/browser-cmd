@@ -4,7 +4,7 @@
 //! is this Chrome or Chromium, is the command line an automation bundle, is
 //! the window headless, is `navigator.webdriver` set, is the viewport an
 //! emulator's default. Real stable Chrome, a normal command line, a real
-//! window when the machine has a display, `AutomationControlled` disabled and
+//! window when the machine has a display, `navigator.webdriver` left unset and
 //! no viewport emulation answer all of them at once. What remains — the CDP
 //! `Runtime.enable` leak — is avoided by never enabling it.
 //!
@@ -85,7 +85,7 @@ const LAUNCH_RECORD: &str = "browser-cmd-launch";
 
 /// How Chrome is started, minus the forwarder's port, which no later daemon shares.
 fn launch_record(settings: &Settings) -> String {
-    let mut record = arguments(settings, None);
+    let mut record = arguments(settings, None, 0);
     record.push(format!("TZ={}", settings.timezone.as_deref().unwrap_or_default()));
     record.join("\n")
 }
@@ -124,8 +124,10 @@ async fn spawn(settings: &Settings, proxy: Option<SocketAddr>) -> Result<(tokio:
     std::fs::create_dir_all(&settings.profile)?;
     owner_only(&settings.profile)?;
     std::fs::write(settings.profile.join(LAUNCH_RECORD), launch_record(settings))?;
+    // A port of our choosing: one Chrome picks itself marks the browser as driven.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")?.local_addr()?.port();
     let mut command = tokio::process::Command::new(&executable);
-    command.args(arguments(settings, proxy));
+    command.args(arguments(settings, proxy, port));
     if let Some(zone) = &settings.timezone {
         command.env("TZ", zone);
     }
@@ -149,7 +151,10 @@ async fn spawn(settings: &Settings, proxy: Option<SocketAddr>) -> Result<(tokio:
         Err(said.into_iter().collect::<Vec<_>>().join(" | "))
     };
     match tokio::time::timeout(settings.waits.launch, listening).await {
-        Ok(Ok(url)) => Ok((child, url)),
+        Ok(Ok(url)) => {
+            std::fs::write(settings.profile.join(crate::chrome::discover::ENDPOINT), &url)?;
+            Ok((child, url))
+        }
         Ok(Err(said)) => Err(Error::Tool(format!(
             "Chrome exited before opening its DevTools port (is the profile {} open in another \
              Chrome?): {said}",
@@ -192,7 +197,7 @@ mod tests {
         headed.headless = false;
         assert_ne!(launch_record(&zoned), record);
         assert_ne!(launch_record(&headed), record);
-        let proxied = arguments(&base, Some("127.0.0.1:9".parse().unwrap()));
+        let proxied = arguments(&base, Some("127.0.0.1:9".parse().unwrap()), 0);
         assert!(proxied.iter().any(|arg| arg.starts_with("--proxy-server=")));
         assert!(!record.contains("--proxy"));
     }

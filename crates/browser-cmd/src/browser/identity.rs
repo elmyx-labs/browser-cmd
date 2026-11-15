@@ -20,6 +20,15 @@ pub(crate) struct Identity {
     pub(crate) metadata: Value,
 }
 
+impl Identity {
+    /// Headless is the only reason an identity is applied: its user agent says
+    /// so, and nothing else about the browser needs to change.
+    pub(crate) fn overrides(&self) -> Value {
+        let user_agent = self.user_agent.replace("HeadlessChrome", "Chrome");
+        json!({"userAgent":user_agent,"userAgentMetadata":self.metadata})
+    }
+}
+
 /// How often the probe looks again for its document's answer: the browser's
 /// own pace, not the action poll a deployment may slow.
 const RECHECK: Duration = Duration::from_millis(50);
@@ -73,14 +82,7 @@ pub(crate) async fn identity(cdp: &Rc<Cdp>, settings: &Settings) -> Result<Ident
 }
 
 pub(crate) async fn apply_identity(tab: &Tab, identity: &Identity) -> Result<()> {
-    // Headless is the only reason an identity is applied: its user agent says
-    // so, and nothing else about the browser needs to change.
-    let user_agent = identity.user_agent.replace("HeadlessChrome", "Chrome");
-    tab.call(
-        "Network.setUserAgentOverride",
-        json!({"userAgent":user_agent,"userAgentMetadata":identity.metadata}),
-    )
-    .await?;
+    tab.call("Network.setUserAgentOverride", identity.overrides()).await?;
     warn_if_software_rendered(tab, &mut World::new()).await;
     Ok(())
 }

@@ -115,7 +115,14 @@ pub(crate) async fn locate(session: &mut Session, tab: &Tab, node: i64) -> Resul
 /// replaced it since the state that named it.
 async fn find(session: &mut Session, tab: &Tab, node: i64) -> Result<std::result::Result<Rect, String>> {
     // Bring it into view and check it is really there, in its own frame.
-    let seen = session.document.world.call_on(tab, node, LOCATE, Vec::new()).await?;
+    let mut seen = session.document.world.call_on(tab, node, LOCATE, vec![json!(true)]).await?;
+    // Out of view, it is scrolled to as a person does, with the wheel; what a
+    // wheel over the page does not reach — a panel, a frame — is jumped to.
+    if let (Some(dx), Some(dy)) = (seen["away"][0].as_f64(), seen["away"][1].as_f64()) {
+        session.hand.wheel(tab, dx, dy).await?;
+        session.settle(tab).await;
+        seen = session.document.world.call_on(tab, node, LOCATE, vec![json!(false)]).await?;
+    }
     match seen["error"].as_str() {
         Some(stale) if seen["stale"] == true => return Ok(Err(stale.to_owned())),
         Some(error) => return Err(Error::Tool(error.to_owned())),

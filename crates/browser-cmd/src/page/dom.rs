@@ -20,6 +20,12 @@ pub(crate) async fn node_at(tab: &Tab, (x, y): (f64, f64)) -> Result<Option<i64>
     Ok(hit["backendNodeId"].as_i64())
 }
 
+/// Whether a click on a file input is told to this connection instead of
+/// opening the system's chooser, which nobody here could answer.
+pub(crate) async fn intercept_chooser(tab: &Tab, enabled: bool) -> Result<()> {
+    tab.call("Page.setInterceptFileChooserDialog", json!({ "enabled": enabled })).await.map(drop)
+}
+
 pub(crate) async fn set_files(tab: &Tab, node: i64, path: &Path) -> Result<()> {
     tab.call("DOM.setFileInputFiles", json!({ "files": [path], "backendNodeId": node })).await?;
     Ok(())

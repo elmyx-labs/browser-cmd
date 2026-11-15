@@ -4,6 +4,7 @@
 
 use std::rc::Rc;
 
+use crate::browser::identity::Identity;
 use crate::chrome::cdp::Cdp;
 use crate::{Error, Result, Settings};
 
@@ -17,7 +18,7 @@ pub struct Host {
 
 pub(crate) struct Shared {
     pub(crate) cdp: Rc<Cdp>,
-    pub(crate) identity: Option<crate::browser::identity::Identity>,
+    pub(crate) identity: Option<Identity>,
     /// Process/proxy ownership survives replacement of a CDP connection.
     pub(crate) process: Option<Rc<BrowserProcess>>,
 }
@@ -151,6 +152,10 @@ impl Host {
                 }
             };
             cdp.discover().await?;
+            cdp.pace(self.settings.pace);
+            if let Some(identity) = &previous.identity {
+                cdp.disguise(identity.overrides()).await?;
+            }
             let shared = Rc::new(Shared {
                 cdp: Rc::new(cdp),
                 identity: previous.identity.clone(),
@@ -167,12 +172,21 @@ impl Host {
             }
             _ => None,
         };
-        let (cdp, chrome) =
-            crate::chrome::launch::open(&self.settings, guard.as_ref().map(|(address, _)| *address)).await?;
+        let proxy = guard.as_ref().map(|(address, _)| *address);
+        let (cdp, chrome) = crate::chrome::launch::open(&self.settings, proxy).await?;
+        let cdp = Rc::new(cdp);
+        let identity = match self.settings.attach.is_none() && self.settings.headless {
+            true => Some(crate::browser::identity::identity(&cdp, &self.settings).await?),
+            false => None,
+        };
         cdp.discover().await?;
-        let mut shared = Shared {
-            cdp: Rc::new(cdp),
-            identity: None,
+        cdp.pace(self.settings.pace);
+        if let Some(identity) = &identity {
+            cdp.disguise(identity.overrides()).await?;
+        }
+        let shared = Shared {
+            cdp,
+            identity,
             process: chrome.map(|chrome| {
                 Rc::new(BrowserProcess {
                     chrome: std::cell::RefCell::new(chrome),
@@ -180,9 +194,6 @@ impl Host {
                 })
             }),
         };
-        if self.settings.attach.is_none() && self.settings.headless {
-            shared.identity = Some(crate::browser::identity::identity(&shared.cdp, &self.settings).await?);
-        }
         let shared = Rc::new(shared);
         *slot = Some(shared.clone());
         Ok(shared)

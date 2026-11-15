@@ -110,9 +110,11 @@ async fn scroll_to_edge(session: &mut Session, tab: &Tab, target: &Target, edge:
 /// one call and the next, and a ref to a message already redrawn names nothing.
 async fn wheel_at(session: &mut Session, tab: &Tab, target: &Target) -> Result<((f64, f64), bool)> {
     let at = match (&target.r#ref, target.x, target.y) {
+        // Somewhere over the middle of the page, which is what it scrolls;
+        // the same exact centre every time is a point no hand rests on.
         (None, None, None) => {
             let (width, height) = crate::page::view::viewport(&mut session.document.world, tab).await?;
-            (width / 2.0, height / 2.0)
+            (width * session.hand.between(0.4, 0.6), height * session.hand.between(0.4, 0.6))
         }
         _ => point(session, tab, target, "scroll over").await?,
     };

@@ -104,9 +104,22 @@ impl Cdp {
             while let Some(Ok(message)) = stream.next().await {
                 let Message::Text(text) = message else { continue };
                 let Ok(message) = serde_json::from_str::<Value>(&text) else { continue };
-                if let Some(mut answer) = recorded.lock().unwrap().apply(&message, dialogs) {
-                    answer["id"] = json!(counter.fetch_add(1, Ordering::Relaxed));
-                    let _ = sender.send(answer.to_string());
+                for reply in recorded.lock().unwrap().apply(&message, dialogs) {
+                    let id = counter.fetch_add(1, Ordering::Relaxed);
+                    let mut command = json!({ "id": id, "method": reply.method, "params": reply.params });
+                    if let Some(session) = reply.session {
+                        command["sessionId"] = session.into();
+                    }
+                    let line = command.to_string();
+                    if reply.after.is_zero() {
+                        let _ = sender.send(line);
+                        continue;
+                    }
+                    let sender = sender.clone();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(reply.after).await;
+                        let _ = sender.send(line);
+                    });
                 }
                 let Some(id) = message["id"].as_u64() else { continue };
                 if let Some(waiter) = answers.lock().unwrap().remove(&id) {
@@ -166,6 +179,18 @@ impl Cdp {
     /// Have the browser tell this connection of every page's creation, change, crash and end.
     pub(crate) async fn discover(&self) -> Result<()> {
         self.call(None, "Target.setDiscoverTargets", json!({ "discover": true })).await.map(drop)
+    }
+
+    /// Answer dialogs at this tempo from here on.
+    pub(crate) fn pace(&self, pace: f64) {
+        self.events().pace = pace;
+    }
+
+    /// Start every page, frame and worker from here on with this user agent
+    /// override, each held until it has it.
+    pub(crate) async fn disguise(&self, identity: Value) -> Result<()> {
+        self.events().disguise = Some(identity);
+        self.call(None, "Target.setAutoAttach", crate::chrome::events::hold_targets()).await.map(drop)
     }
 
     /// The browser's own user agent.

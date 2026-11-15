@@ -35,12 +35,22 @@ pub(crate) struct Events {
     pub(crate) targets: targets::Targets,
     /// Sessions attached and not yet detached, recorded before the attaching caller wakes.
     pub(crate) attachments: HashSet<String>,
+    /// The user agent override every target is started with, when the browser's
+    /// own names it headless.
+    pub(crate) disguise: Option<Value>,
+    /// Sessions whose page asked for a file since they were last asked about it.
+    choosers: HashSet<String>,
+    /// The tab told it has the focus, and the session that told it.
+    pub(crate) focused: Option<(String, String)>,
+    /// The tempo a dialog is read at before it is answered: a person's at 1, none at 0.
+    pub(crate) pace: f64,
 }
 
 impl Events {
     /// Apply one message from the browser. A dialog must be answered at once or
-    /// its tab stops answering anything, so the answer to send comes back.
-    pub(crate) fn apply(&mut self, message: &Value, dialogs: Dialogs) -> Option<Value> {
+    /// its tab stops answering anything, and a target held at its start must be
+    /// let go, so the commands to send come back.
+    pub(crate) fn apply(&mut self, message: &Value, dialogs: Dialogs) -> Vec<Reply> {
         let session = message["sessionId"].as_str();
         let params = &message["params"];
         let method = message["method"].as_str().unwrap_or_default();
@@ -68,19 +78,25 @@ impl Events {
             self.detach(session);
         }
         if message.get("id").is_some() {
-            return None;
+            return Vec::new();
         }
         self.volunteered(session.unwrap_or_default(), method, params, dialogs)
     }
 
     fn detach(&mut self, session: &str) {
         self.attachments.remove(session);
+        self.choosers.remove(session);
         self.frames.detach(session);
         self.activity.detach(session);
         self.notes.detach(session);
         self.logs.detach(session);
         self.downloads.detach(session);
         self.traffic.detach(session);
+    }
+
+    /// Whether this tab's page asked for a file since it was last asked about it.
+    pub(crate) fn chooser_opened(&mut self, session: &str) -> bool {
+        self.choosers.remove(session)
     }
 
     /// Keep this tab's traffic for `network`, and say its failed requests when `noted`.
@@ -91,26 +107,75 @@ impl Events {
         }
     }
 
+    /// A target the browser attached this connection to by itself, held at its
+    /// start when it is new. An override set on a tab reaches that tab's
+    /// document and nothing else: a popup's first request, a frame or a worker
+    /// in a process of its own would each name the browser headless. So each
+    /// is given the same identity before its first script runs, a document is
+    /// told to hold what it starts the same way, and then it is let go. What
+    /// carries no identity is let go and left.
+    fn disguised(&self, params: &Value) -> Vec<Reply> {
+        let Some(session) = params["sessionId"].as_str() else { return Vec::new() };
+        let command = |method: &str, params: Value| Reply::now(Some(session), method, params);
+        let kind = params["targetInfo"]["type"].as_str().unwrap_or_default();
+        let document = matches!(kind, "page" | "iframe");
+        let mut commands = Vec::new();
+        // A worker has no Network domain; the same override is the Emulation domain's there.
+        let overriding = match kind {
+            "page" | "iframe" => Some("Network.setUserAgentOverride"),
+            "service_worker" | "shared_worker" => Some("Emulation.setUserAgentOverride"),
+            _ => None,
+        };
+        if let (Some(method), Some(identity)) = (overriding, &self.disguise) {
+            commands.push(command(method, identity.clone()));
+        }
+        if document {
+            commands.push(command("Target.setAutoAttach", hold_targets()));
+        }
+        // The override lives as long as the session that set it; a session
+        // that set none is not kept.
+        let kept = !commands.is_empty();
+        if params["waitingForDebugger"] == true {
+            commands.push(command("Runtime.runIfWaitingForDebugger", json!({})));
+        }
+        if !kept {
+            commands.push(Reply::now(None, "Target.detachFromTarget", json!({ "sessionId": session })));
+        }
+        commands
+    }
+
     /// A message with no id is an event the browser volunteered: a dialog to
     /// answer, a download to report once it lands, a request the page asked
     /// for and did not get, a log line.
-    fn volunteered(
-        &mut self,
-        session: &str,
-        method: &str,
-        params: &Value,
-        dialogs: Dialogs,
-    ) -> Option<Value> {
+    fn volunteered(&mut self, session: &str, method: &str, params: &Value, dialogs: Dialogs) -> Vec<Reply> {
         match method {
             "Page.javascriptDialogOpening" => {
                 let kind = params["type"].as_str().unwrap_or("modal");
                 let accepted = dialogs.accepts(kind);
                 let message = params["message"].as_str().unwrap_or_default().into();
                 self.notes.add(session, Note::Dialog { kind: kind.into(), message, accepted });
-                return Some(json!({
-                    "sessionId": session, "method": "Page.handleJavaScriptDialog",
-                    "params": { "accept": accepted, "promptText": params["defaultPrompt"] },
-                }));
+                // Nobody answers a dialog in the millisecond it opens, and the
+                // page that opened it can time the answer.
+                let read = READ_DIALOG.0 + (READ_DIALOG.1 - READ_DIALOG.0) * chance();
+                return vec![Reply {
+                    after: Duration::from_secs_f64(read * self.pace),
+                    ..Reply::now(
+                        Some(session),
+                        "Page.handleJavaScriptDialog",
+                        json!({ "accept": accepted, "promptText": params["defaultPrompt"] }),
+                    )
+                }];
+            }
+            "Page.fileChooserOpened" => drop(self.choosers.insert(session.to_owned())),
+            "Target.attachedToTarget" if self.disguise.is_some() => return self.disguised(params),
+            // A window a page opens takes the focus from it, as the browser
+            // does it: at once, not when the session comes to follow it there.
+            "Target.targetCreated" if params["targetInfo"]["type"] == "page" => {
+                let opener = params["targetInfo"]["openerId"].as_str();
+                if let Some((_, session)) = self.focused.take_if(|(target, _)| opener == Some(target)) {
+                    let unfocused = json!({ "enabled": false });
+                    return vec![Reply::now(Some(&session), "Emulation.setFocusEmulationEnabled", unfocused)];
+                }
             }
             // Browser events carry a frame id at begin, then only a guid. Capture
             // the frame's observers at begin; never assign a file to the next caller.
@@ -165,7 +230,7 @@ impl Events {
             "Log.entryAdded" if !session.is_empty() => self.logs.add(session, &params["entry"]),
             _ => {}
         }
-        None
+        Vec::new()
     }
 
     pub(crate) fn network_quiet(&self, session: &str) -> bool {
@@ -217,6 +282,36 @@ impl Events {
     pub(crate) fn register_frames(&mut self, session: &str, tree: &Value) {
         self.frames.register(session, tree);
     }
+}
+
+/// A command the connection sends on the browser's own account, and how long
+/// from now: at once, but for an answer a person would take time over.
+pub(crate) struct Reply {
+    pub(crate) session: Option<String>,
+    pub(crate) method: String,
+    pub(crate) params: Value,
+    pub(crate) after: Duration,
+}
+
+impl Reply {
+    fn now(session: Option<&str>, method: &str, params: Value) -> Self {
+        Self { session: session.map(str::to_owned), method: method.to_owned(), params, after: Duration::ZERO }
+    }
+}
+
+/// How long a person reads a dialog before answering it, in seconds.
+const READ_DIALOG: (f64, f64) = (0.8, 2.2);
+
+/// Uniform in `0..1`, from the randomness the standard library seeds its maps with.
+fn chance() -> f64 {
+    use std::hash::{BuildHasher, Hasher};
+    let drawn = std::collections::hash_map::RandomState::new().build_hasher().finish();
+    (drawn >> 11) as f64 / (1_u64 << 53) as f64
+}
+
+/// Attach to every target started from here on, each held until it is let go.
+pub(crate) fn hold_targets() -> Value {
+    json!({ "autoAttach": true, "waitForDebuggerOnStart": true, "flatten": true })
 }
 
 #[cfg(test)]
@@ -371,9 +466,10 @@ mod tests {
         let mut events = Events::default();
         let answer = events
             .apply(&json!({"sessionId":"a","method":"Page.javascriptDialogOpening","params":{"type":"confirm","message":"Sure?"}}), Dialogs::AlertsOnly)
-            .unwrap();
-        assert_eq!(answer["method"], "Page.handleJavaScriptDialog");
-        assert_eq!(answer["params"]["accept"], false);
+            .remove(0);
+        assert_eq!(answer.method, "Page.handleJavaScriptDialog");
+        assert_eq!(answer.params["accept"], false);
+        assert_eq!(answer.after, Duration::ZERO, "no tempo, no wait");
         assert!(matches!(&events.take_notes("a", "A")[..], [Note::Dialog { accepted: false, .. }]));
     }
 
@@ -414,5 +510,46 @@ mod tests {
         apply(&mut events, json!({"sessionId":"a","method":"Log.entryAdded","params":{"entry":{}}}));
         assert_eq!(events.navigation_epoch("a"), 2);
         assert_eq!(events.navigation_epoch("b"), 1);
+    }
+
+    /// A popup, a frame and a worker held at their start are given the
+    /// identity before they are let go; a document also holds what it starts.
+    #[test]
+    fn a_held_target_is_given_the_identity_then_let_go() {
+        let mut events = Events { disguise: Some(json!({ "userAgent": "UA" })), ..Events::default() };
+        let mut sent = |kind: &str, waiting: bool| -> Vec<String> {
+            let attached = json!({"method":"Target.attachedToTarget","params":{"sessionId":"new","targetInfo":{"type":kind},"waitingForDebugger":waiting}});
+            let commands = events.apply(&attached, Dialogs::Accept);
+            commands.into_iter().map(|command| command.method).collect()
+        };
+        let document =
+            ["Network.setUserAgentOverride", "Target.setAutoAttach", "Runtime.runIfWaitingForDebugger"];
+        assert_eq!(sent("page", true), document);
+        assert_eq!(sent("iframe", true), document);
+        assert_eq!(sent("page", false), document[..2], "a page already open is not waiting");
+        for worker in ["service_worker", "shared_worker"] {
+            assert_eq!(
+                sent(worker, true),
+                ["Emulation.setUserAgentOverride", "Runtime.runIfWaitingForDebugger"]
+            );
+        }
+        assert_eq!(sent("worker", true), ["Runtime.runIfWaitingForDebugger", "Target.detachFromTarget"]);
+    }
+
+    #[test]
+    fn nothing_is_held_or_overridden_where_the_browser_names_itself_truthfully() {
+        let attached = json!({"method":"Target.attachedToTarget","params":{"sessionId":"new","targetInfo":{"type":"page"},"waitingForDebugger":true}});
+        assert!(Events::default().apply(&attached, Dialogs::Accept).is_empty());
+    }
+
+    #[test]
+    fn a_window_a_page_opens_takes_the_focus_from_it_at_once() {
+        let mut events = Events { focused: Some(("opener".into(), "session".into())), ..Events::default() };
+        let created = |opener: &str| json!({"method":"Target.targetCreated","params":{"targetInfo":{"targetId":"new","type":"page","openerId":opener}}});
+        assert!(events.apply(&created("another"), Dialogs::Accept).is_empty());
+        let told = events.apply(&created("opener"), Dialogs::Accept);
+        assert_eq!(told[0].session.as_deref(), Some("session"));
+        assert_eq!(told[0].params["enabled"], false);
+        assert!(events.focused.is_none());
     }
 }

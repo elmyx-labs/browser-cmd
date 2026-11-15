@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+What a page sees of the browser and of the hand on it, measured against an ordinary Chrome on the same
+machine and brought to match it.
+
+- Launch: `Notification` and push are there again, Widevine works, a link's `ping` is sent, and a headed
+  window no longer carries Chrome's warning bar about an unsupported flag. Chrome's own components are
+  updated as in any Chrome, also through a proxy when one is set.
+- Headless: a frame from another site and a window a page opens name the same browser as the page from
+  their first request, and the virtual screen has a Mac display's colour depth. A sandboxed frame and a
+  shared or service worker can still name themselves headless, and a headless browser still answers a
+  permission request, `print()` and fullscreen as no window does: for a site that checks, use a headed
+  browser.
+- Pointer: a pressed button reports a mouse's pressure, a double click has a hand's gap between its two
+  presses, travel speeds up and slows down, a press lands near the middle of its target more often than
+  near its edge, and an element out of view is scrolled to with the wheel, in the notches a wheel turns in.
+- Keyboard: a key is held as long as a finger holds it, a capital or a symbol presses Shift first, every
+  key of a US keyboard is typed as a key, and typing starts a moment after the click that focused the
+  field.
+- A JavaScript dialog is answered after the time it takes to read it, scaled by `BROWSER_CMD_PACE`.
+- `upload` clicks a file input a person could click and answers its chooser; an input a page hides is
+  handed its file directly, as before.
+- A window a page opens takes the focus from the page that opened it at once.
+
 ## 0.1.0
 
 First public release.

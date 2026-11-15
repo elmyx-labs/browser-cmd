@@ -4,6 +4,12 @@
 
 use super::*;
 
+/// Whether a page nobody here is attached to still reads as attached: a
+/// headless browser holds every page itself, for the identity it gives it.
+fn held(cdp: &crate::chrome::cdp::Cdp) -> bool {
+    cdp.events().disguise.is_some()
+}
+
 #[tokio::test]
 #[ignore = "requires installed Chrome; run with --include-ignored"]
 async fn real_chrome_follows_the_window_a_click_opens_past_other_tabs() {
@@ -183,7 +189,11 @@ async fn attachment_lifetime_follows_last_owner_without_closing_the_page() {
             drop(retained);
             let info =
                 shared.cdp.call(None, "Target.getTargetInfo", json!({"targetId":target})).await.unwrap();
-            assert_eq!(info["targetInfo"]["attached"], false, "last owner leaked its CDP attachment");
+            assert_eq!(
+                info["targetInfo"]["attached"],
+                held(&shared.cdp),
+                "last owner leaked its CDP attachment"
+            );
             assert!(shared.cdp.call(Some(&session), "Page.getFrameTree", json!({})).await.is_err());
             let reattached = crate::chrome::tab::attach(&shared.cdp, target).await.unwrap();
             reattached.call("Page.getFrameTree", json!({})).await.unwrap();
@@ -233,7 +243,7 @@ async fn tab_switching_releases_previous_attachments_and_new_never_reuses_blank_
             assert_eq!(crate::tabs::pages(&handler.host).await.unwrap().len(), count);
             drop(handler);
             let info = cdp.call(None, "Target.getTargetInfo", json!({"targetId":before})).await.unwrap();
-            assert_eq!(info["targetInfo"]["attached"], false);
+            assert_eq!(info["targetInfo"]["attached"], held(&cdp));
             host.shutdown().await;
         })
         .await;
@@ -263,7 +273,7 @@ async fn concurrent_sessions_claim_distinct_pages_and_do_not_reuse_released_blan
             for target in old {
                 let info =
                     new.cdp.call(None, "Target.getTargetInfo", json!({"targetId":target})).await.unwrap();
-                assert_eq!(info["targetInfo"]["attached"], false);
+                assert_eq!(info["targetInfo"]["attached"], held(&new.cdp));
             }
             host.shutdown().await;
         })

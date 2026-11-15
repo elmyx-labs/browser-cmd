@@ -168,7 +168,159 @@ async fn real_chrome_presses_a_symbol_key() {
             assert!(pressed.ok, "{}", pressed.output);
         }
         let heard = session.execute("eval", json!({ "expression": "o.textContent" })).await;
-        assert!(heard.output.contains("/Slashfalse;?Slashtrue;.Periodfalse;aKeyAfalse;"), "{}", heard.output);
+        assert!(
+            heard.output.contains("/Slashfalse;ShiftShiftLefttrue;?Slashtrue;.Periodfalse;aKeyAfalse;"),
+            "{}",
+            heard.output
+        );
+    })
+    .await;
+}
+
+/// A field is typed into key by key. Only characters outside the US layout
+/// use the input-method insertion fallback.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_keyboard_events_include_modifiers_and_all_us_symbols() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <input id=i aria-label=Entry><script>
+        document.documentElement.dataset.keys='[]';
+        for(const type of ['keydown','keyup']) addEventListener(type,e=>{
+          const keys=JSON.parse(document.documentElement.dataset.keys);
+          keys.push([e.type,e.key,e.code,e.shiftKey,e.ctrlKey,e.metaKey,e.isTrusted]);
+          document.documentElement.dataset.keys=JSON.stringify(keys);
+        });
+        i.focus();</script>"#
+            .into(),
+    );
+    on_page(address, async |session, _| {
+        let tab = session.current().await.unwrap();
+        let text: String = (' '..='~').collect();
+        let typed = session.execute("type", json!({"ref":"Entry","text":text})).await;
+        assert!(typed.ok, "{}", typed.output);
+        assert_eq!(session.document.world.evaluate(&tab, "i.value").await.unwrap(), text);
+        assert_eq!(
+            session
+                .document
+                .world
+                .evaluate(&tab, "JSON.parse(document.documentElement.dataset.keys).filter(e=>e[0]==='keydown' && e[1]!=='Shift').length")
+                .await
+                .unwrap(),
+            95
+        );
+        assert_eq!(session.document.world.evaluate(&tab, "JSON.parse(document.documentElement.dataset.keys).every(e=>e[6])").await.unwrap(), true);
+        session.document.world.evaluate(&tab, "i.value=''; document.documentElement.dataset.keys='[]'; true").await.unwrap();
+        let typed = session.execute("type", json!({"ref":"Entry","text":"Aé"})).await;
+        assert!(typed.ok, "{}", typed.output);
+        assert_eq!(
+            session.document.world.evaluate(&tab, "JSON.parse(document.documentElement.dataset.keys).map(e=>e.slice(0,4))").await.unwrap(),
+            json!([
+                ["keydown", "Shift", "ShiftLeft", true],
+                ["keydown", "A", "KeyA", true],
+                ["keyup", "A", "KeyA", true],
+                ["keyup", "Shift", "ShiftLeft", false]
+            ])
+        );
+        assert_eq!(session.document.world.evaluate(&tab, "i.value.endsWith('Aé')").await.unwrap(), true);
+        session.document.world.evaluate(&tab, "document.documentElement.dataset.keys='[]'; true").await.unwrap();
+        let modifier = if cfg!(target_os = "macos") { "Meta" } else { "Control" };
+        let pressed = session.execute("press", json!({"key":format!("{modifier}+a")})).await;
+        assert!(pressed.ok, "{}", pressed.output);
+        let events = session.document.world.evaluate(&tab, "JSON.parse(document.documentElement.dataset.keys).map(e=>e.slice(0,3))").await.unwrap();
+        assert_eq!(
+            events,
+            json!([
+                ["keydown", modifier, format!("{modifier}Left")],
+                ["keydown", "a", "KeyA"],
+                ["keyup", "a", "KeyA"],
+                ["keyup", modifier, format!("{modifier}Left")]
+            ])
+        );
+        assert_eq!(session.document.world.evaluate(&tab, "i.selectionStart === 0 && i.selectionEnd === i.value.length").await.unwrap(), true);
+        assert_eq!(session.document.world.evaluate(&tab, "JSON.parse(document.documentElement.dataset.keys).at(-1).slice(3,6)").await.unwrap(), json!([false,false,false]));
+        let pressed = session.execute("press", json!({"key":"Shift+a"})).await;
+        assert!(pressed.ok, "{}", pressed.output);
+        assert_eq!(session.document.world.evaluate(&tab, "i.value").await.unwrap(), "A");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_selects_options_and_rejects_disabled_choices() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <select id=s aria-label=Choice>
+          <option value=a>Alpha</option><option disabled>Disabled</option>
+          <optgroup label=Unavailable disabled><option>Skipped</option></optgroup>
+          <option value=b>Beta</option><option value=c>Gamma</option>
+        </select>
+        <select id=m aria-label=Multiple multiple><option selected>One</option><option>Two</option></select>
+        <select aria-label=Locked disabled><option>Locked option</option></select>
+        <script>document.documentElement.dataset.events='[]';
+        for(const type of ['input','change']) s.addEventListener(type,e=>{
+          const events=JSON.parse(document.documentElement.dataset.events);
+          events.push([e.type,e.isTrusted,s.value]);
+          document.documentElement.dataset.events=JSON.stringify(events);
+        });</script>"#
+            .into(),
+    );
+    on_page(address, async |session, _| {
+        let tab = session.current().await.unwrap();
+        for (option, value) in [("Beta", "b"), ("Gamma", "c"), ("Alpha", "a")] {
+            let selected = session.execute("select", json!({"ref":"Choice", "option":option})).await;
+            assert!(selected.ok, "{}; state: {:?}", selected.output, session.document.world.evaluate(&tab, "[s.selectedIndex,s.value,document.activeElement.id,document.documentElement.dataset.events]").await);
+            assert_eq!(session.document.world.evaluate(&tab, "s.value").await.unwrap(), value);
+        }
+        assert_eq!(
+            session
+                .document
+                .world
+                .evaluate(&tab, "JSON.parse(document.documentElement.dataset.events).every(e=>!e[1])")
+                .await
+                .unwrap(),
+            true
+        );
+        assert_eq!(
+            session
+                .document
+                .world
+                .evaluate(
+                    &tab,
+                    "JSON.parse(document.documentElement.dataset.events).some(e=>e[0]==='change')"
+                )
+                .await
+                .unwrap(),
+            true
+        );
+        let disabled = session.execute("select", json!({"ref":"Choice", "option":"Disabled"})).await;
+        assert!(!disabled.ok && disabled.output.contains("option is disabled"), "{}", disabled.output);
+        let group = session.execute("select", json!({"ref":"Choice", "option":"Skipped"})).await;
+        assert!(!group.ok && group.output.contains("option is disabled"), "{}", group.output);
+        let locked = session.execute("select", json!({"ref":"Locked", "option":"Locked option"})).await;
+        assert!(!locked.ok && locked.output.contains("select is disabled"), "{}", locked.output);
+        let multiple = session.execute("select", json!({"ref":"Multiple", "option":"Two"})).await;
+        assert!(multiple.ok, "{}", multiple.output);
+        assert_eq!(
+            session.document.world.evaluate(&tab, "Array.from(m.selectedOptions,o=>o.value)").await.unwrap(),
+            json!(["Two"])
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_treats_crlf_as_one_enter_when_typing() {
+    let address = serve(
+        "<!doctype html><title>t</title><div id=e contenteditable></div><script>e.focus()</script>".into(),
+    );
+    on_page(address, async |session, _| {
+        let typed = session.execute("type", json!({"text":"first\r\nsecond"})).await;
+        assert!(typed.ok, "{}", typed.output);
+        let tab = session.current().await.unwrap();
+        assert_eq!(session.document.world.evaluate(&tab, "e.innerText").await.unwrap(), "first\nsecond");
     })
     .await;
 }
