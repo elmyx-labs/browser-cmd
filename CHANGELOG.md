@@ -10,6 +10,9 @@ What surrounds the commands: telling builds apart, releasing, and finding out wh
   Chrome it would launch, the daemon, and whether the skill each agent reads is this build's.
 - The agent skill is carried in the binary: `skill` prints it and `skill install` writes it for Claude
   Code, Codex and Pi.
+- `tab show [tN]` puts a tab's window in front of the person, whatever `BROWSER_CMD_FOLLOW` says, for
+  the sign-in, second factor or challenge only they can pass; a headless browser says it has no window
+  and how to get one.
 - A tab that left one browser call unanswered gets a short wait for the next ones until it answers
   again, so a command on a stuck tab ends in about half a minute instead of at the 100 s deadline.
 - A command that waited behind another one, or found every session taken, says it was not started and

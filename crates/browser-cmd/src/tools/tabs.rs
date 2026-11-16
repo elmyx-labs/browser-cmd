@@ -53,6 +53,23 @@ pub(crate) async fn tab(session: &mut Session, args: Value) -> Result<String> {
             let name = session.book.handle(&target);
             after(session, &tab, &format!("Switched to {name}")).await
         }
+        "show" => {
+            if session.host.settings().headless {
+                return Err(Error::Tool(
+                    "a headless browser has no window to put in front of a person: set BROWSER_CMD_HEADLESS=0 \
+                     (headless = false in config.toml), `restart`, and open the page again"
+                        .into(),
+                ));
+            }
+            let target = session.book.chosen(&tabs, args.id.as_deref())?;
+            let tab = crate::tabs::select(session, &target).await?;
+            tab.activate().await?;
+            Ok(format!(
+                "{} is in front of the person. Tell them what to do there, then `wait` for what the page \
+                 shows once they have.",
+                session.book.handle(&target)
+            ))
+        }
         "close" => {
             let target = session.book.chosen(&tabs, args.id.as_deref())?;
             let said = match session.book.registry.of(&target).is_some_and(|entry| entry.borrowed) {

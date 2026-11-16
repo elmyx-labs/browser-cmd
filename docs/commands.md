@@ -221,10 +221,10 @@ Check that the page is now as expected and fail if it is not. text and gone each
 ### tab
 
 ```
-browser-cmd tab list|check|tidy | new [URL] | switch|close|keep|unkeep|give|restore [tN] | use N|ID
+browser-cmd tab list|check|tidy|new [URL]|switch|show|close|keep|unkeep|give|restore [tN]|use N|ID
 ```
 
-This session's tabs, each by a handle t1, t2, … it keeps for the session: list them, switch to or close one, or open a new one at an optional url; a window one of them opens later is this session's too. Other sessions' tabs are one count with their names. Tabs no session holds, such as a person's, are listed apart and numbered: use borrows one (use active the one in front of the person), which is never closed — close gives it back — and from which navigate URL opens a new tab. give tN to=SESSION hands a tab to another session. keep marks a tab — the current one unless named — as evidence, with an optional label=TEXT, and unkeep undoes it; navigate URL on a kept tab opens a new tab for it, and a kept tab lost with the browser is reopened at its address; one gone since an earlier run of the daemon waits for restore; a tab that crashed is reloaded. check looks at every tab now — open, loaded, an error page or refusal, a wall, empty, still at its kept address, closed or crashed, reopening nothing — and saves a screenshot of each kept one; tidy closes the tabs not kept. action=, id=, url=, label= and to= say it as pairs.
+This session's tabs, each by a handle t1, t2, … it keeps for the session: list them, switch to or close one, or open a new one at an optional url; a window one of them opens later is this session's too. Other sessions' tabs are one count with their names. Tabs no session holds, such as a person's, are listed apart and numbered: use borrows one (use active the one in front of the person), which is never closed — close gives it back — and from which navigate URL opens a new tab. give tN to=SESSION hands a tab to another session. show puts a tab's window in front of the person, for the sign-in, second factor or challenge only they can pass. keep marks a tab — the current one unless named — as evidence, with an optional label=TEXT, and unkeep undoes it; navigate URL on a kept tab opens a new tab for it, and a kept tab lost with the browser is reopened at its address; one gone since an earlier run of the daemon waits for restore; a tab that crashed is reloaded. check looks at every tab now — open, loaded, an error page or refusal, a wall, empty, still at its kept address, closed or crashed, reopening nothing — and saves a screenshot of each kept one; tidy closes the tabs not kept. action=, id=, url=, label= and to= say it as pairs.
 
 ### upload
 
@@ -289,6 +289,7 @@ End this session: close its tabs, give back borrowed ones, and leave kept ones o
 | `tab list` | This session's tabs by handle (`t1`, `t2`, …), other sessions' tabs as a count, and tabs no session holds, numbered. |
 | `tab new [URL]` | Open a new tab, at URL if given. |
 | `tab switch tN` | Make tN the active tab. A headed browser brings it forward only with `BROWSER_CMD_FOLLOW`. |
+| `tab show [tN]` | Put a tab's window (the current one unless named) in front of the person, whatever `BROWSER_CMD_FOLLOW` says, for a sign-in, a second factor or a challenge only they can pass; then `wait` for what the page shows once they have. A headless browser has no window and says so. |
 | `tab close tN` | Close tN; a borrowed tab is given back and left open. |
 | `tab keep [tN] [label=TEXT]` | Mark a tab (the current one unless named) as evidence: `navigate URL` on it opens a new tab, `tidy` and `close` leave it open. |
 | `tab unkeep [tN]` | Undo `keep`. |

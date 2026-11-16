@@ -396,14 +396,15 @@ pub const CATALOGUE: &[Command] = &[
     },
     Command {
         name: "tab",
-        usage: "list|check|tidy | new [URL] | switch|close|keep|unkeep|give|restore [tN] | use N|ID",
+        usage: "list|check|tidy|new [URL]|switch|show|close|keep|unkeep|give|restore [tN]|use N|ID",
         about: "This session's tabs, each by a handle t1, t2, … it keeps for the session: list them, \
                 switch to or close one, or open a new one at an optional url; a window one of them \
                 opens later is this session's too. Other sessions' tabs are one count with their names. \
                 Tabs no session holds, such as a person's, are listed apart and numbered: use borrows \
                 one (use active the one in front of the person), which is never closed — close gives it \
                 back — and from which navigate URL opens a new tab. give tN to=SESSION hands a tab to \
-                another session. keep marks a tab — the \
+                another session. show puts a tab's window in front of the person, for the sign-in, \
+                second factor or challenge only they can pass. keep marks a tab — the \
                 current one unless named — as evidence, with an optional label=TEXT, and unkeep undoes \
                 it; navigate URL on a kept tab opens a new tab for it, and a kept tab lost with the \
                 browser is reopened at its address; one gone since an earlier run of the daemon \

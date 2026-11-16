@@ -436,3 +436,21 @@ async fn a_session_ended_while_the_browser_is_busy_for_another_still_closes_its_
     })
     .await;
 }
+
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn a_headless_browser_has_no_window_to_show_a_person_and_says_how_to_get_one() {
+    let address = serve("<!doctype html><title>sign in</title><h1>Sign in</h1>".to_owned());
+    let temp = tempfile::tempdir().unwrap();
+    let mut settings = settings(temp.path(), temp.path());
+    settings.headless = true;
+    tokio::task::LocalSet::new()
+        .run_until(async {
+            let mut session = Host::new(settings).session();
+            let opened = session.execute("navigate", json!({ "url": format!("http://{address}/") })).await;
+            assert!(opened.ok, "{}", opened.output);
+            let shown = session.execute("tab", json!({ "action": "show" })).await;
+            assert!(!shown.ok && shown.output.contains("BROWSER_CMD_HEADLESS=0"), "{}", shown.output);
+        })
+        .await;
+}
