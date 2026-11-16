@@ -186,12 +186,11 @@ browser-cmd close                             # end the session; the browser sta
 
 A failed command exits non-zero, repeats its reason on stderr and leaves a trace under
 `.browser-cmd/traces/`. `browser-cmd status` says whether the daemon is up, `browser-cmd doctor` what a
-command would run into (no Chrome found, a daemon of another build, a skill that is not this build's),
-and `browser-cmd --help` lists every command.
+command would run into (no Chrome found, a daemon of another build), and `browser-cmd --help` lists
+every command.
 
 To upgrade, run the installer again: the next command replaces a running daemon of the older build.
-`browser-cmd skill install` rewrites the agent skill from the binary, so the two never describe
-different commands. To remove browser-cmd, end the daemon's process
+The installer also writes the skill again, so pass `--no-skills` if you have edited yours. To remove browser-cmd, end the daemon's process
 (`browser-cmd --serve`; its Chrome closes with it), then delete the binary, `~/.browser-cmd` and the
 `browser-cmd` folder under `~/.claude/skills` and `~/.agents/skills`.
 

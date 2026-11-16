@@ -7,9 +7,7 @@ What surrounds the commands: telling builds apart, releasing, and finding out wh
 - `--version` and the daemon name the commit they were built from, so a daemon left running by an older
   build of the same version is replaced by the next command instead of answering it.
 - `doctor` says what a command would run into without starting a browser: the build and where it is, the
-  Chrome it would launch, the daemon, and whether the skill each agent reads is this build's.
-- The agent skill is carried in the binary: `skill` prints it and `skill install` writes it for Claude
-  Code, Codex and Pi.
+  Chrome it would launch, and the daemon.
 - `tab show [tN]` puts a tab's window in front of the person, whatever `BROWSER_CMD_FOLLOW` says, for
   the sign-in, second factor or challenge only they can pass; a headless browser says it has no window
   and how to get one.

@@ -65,7 +65,7 @@ pub(crate) fn is_command(name: &str) -> bool {
 }
 
 /// Commands the client answers itself.
-pub const LOCAL: &[&str] = &["status", "doctor", "skill", "batch", "restart"];
+pub const LOCAL: &[&str] = &["status", "doctor", "batch", "restart"];
 
 pub const CATALOGUE: &[Command] = &[
     Command {

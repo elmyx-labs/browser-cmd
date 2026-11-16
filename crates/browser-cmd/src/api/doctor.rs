@@ -1,8 +1,8 @@
 //! `doctor`: what a command would run into, checked without starting a
 //! browser — the build, the Chrome it would launch, whether that Chrome gets
-//! a window, the daemon, and the skill each agent reads.
+//! a window, and the daemon.
 
-use crate::api::{app, client, http, skill};
+use crate::api::{app, client, http};
 use crate::chrome::discover::chrome_to_launch;
 use crate::{Error, Result};
 
@@ -36,25 +36,6 @@ async fn daemon(address: &str) -> Result<String> {
     })
 }
 
-fn skills() -> Result<String> {
-    let places = skill::places();
-    if places.is_empty() {
-        return Ok("no coding agent found (~/.claude, ~/.codex, ~/.pi)".into());
-    }
-    let stale: Vec<String> = places
-        .iter()
-        .filter(|place| std::fs::read_to_string(place).ok().as_deref() != Some(skill::SKILL))
-        .map(|place| place.display().to_string())
-        .collect();
-    match stale.is_empty() {
-        true => Ok(format!("this build's, in {} place(s)", places.len())),
-        false => Err(Error::Tool(format!(
-            "not this build's in {}; run `browser-cmd skill install`",
-            stale.join(", ")
-        ))),
-    }
-}
-
 /// Every line is printed, a failed one as what to do about it; the command
 /// fails if any did.
 pub(crate) async fn run() -> Result<()> {
@@ -64,7 +45,6 @@ pub(crate) async fn run() -> Result<()> {
     let checks = [
         ("chrome", app::settings().and_then(|settings| chrome(&settings))),
         ("daemon", daemon(&address).await),
-        ("skill", skills()),
     ];
     for (name, found) in &checks {
         match found {

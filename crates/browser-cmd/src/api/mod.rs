@@ -8,6 +8,5 @@ pub(crate) mod doctor;
 pub(crate) mod help;
 pub(crate) mod http;
 pub(crate) mod server;
-pub(crate) mod skill;
 pub(crate) mod trace;
 pub(crate) mod wire;

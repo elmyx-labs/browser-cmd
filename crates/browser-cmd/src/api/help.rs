@@ -40,10 +40,8 @@ const SUMMARY: &str = "browser-cmd: a real Chrome for an agent, driven from the 
 Usage:
   browser-cmd <command> [args]     run one browser action against a warm daemon
   browser-cmd status               is the daemon up
-  browser-cmd doctor               what a command would run into: the Chrome found, the
-                                   daemon, the skill each agent reads; starts nothing
-  browser-cmd skill [install]      print the agent skill of this build, or write it
-                                   where Claude Code, Codex and Pi read skills
+  browser-cmd doctor               what a command would run into: the build, the Chrome
+                                   found and the daemon; starts nothing
   browser-cmd restart              stop the daemon and start it with the current settings
   browser-cmd batch <<'EOF'        several commands, one per line, in one call: each
                                    but the last says one line, the first failure stops

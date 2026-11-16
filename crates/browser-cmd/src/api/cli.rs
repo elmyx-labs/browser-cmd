@@ -32,7 +32,6 @@ pub async fn run(argv: &[String]) -> Result<()> {
         "batch" => return batch().await,
         "restart" => return restart().await,
         "doctor" => return crate::api::doctor::run().await,
-        "skill" => return crate::api::skill::run(rest),
         "back" | "forward" => {
             let argv: Vec<String> =
                 ["navigate".into(), name.clone()].into_iter().chain(rest.to_vec()).collect();
