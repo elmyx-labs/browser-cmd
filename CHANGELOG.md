@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+What surrounds the commands: telling builds apart, releasing, and finding out what went wrong.
+
+- `--version` and the daemon name the commit they were built from, so a daemon left running by an older
+  build of the same version is replaced by the next command instead of answering it.
+- `doctor` says what a command would run into without starting a browser: the build and where it is, the
+  Chrome it would launch, the daemon, and whether the skill each agent reads is this build's.
+- The agent skill is carried in the binary: `skill` prints it and `skill install` writes it for Claude
+  Code, Codex and Pi.
+- A tab that left one browser call unanswered gets a short wait for the next ones until it answers
+  again, so a command on a stuck tab ends in about half a minute instead of at the 100 s deadline.
+- A command that waited behind another one, or found every session taken, says it was not started and
+  why, instead of an unconfirmed outcome.
+- A failure trace leaves out what `type` typed, is readable by its owner only, and the last 50 are kept;
+  writing it no longer waits on a daemon that did not answer.
+- The daemon keeps a log of its start and of the error or panic it ended on, in
+  `~/.browser-cmd/daemon-ADDRESS.log`, and a daemon that dies at startup points to it.
+- No stable Chrome found: the message names the Chromium, Beta or "for Testing" builds it passed over.
+  Chrome leaving over its sandbox: the message names `BROWSER_CMD_NO_SANDBOX`.
+- Something that is not browser-cmd on the daemon's port is reported as that, and is no longer asked to
+  restart.
+- Releases run the checks CI runs before building, and start each binary once before publishing it; CI
+  runs the real-Chrome tests on Linux.
+
 What a page sees of the browser and of the hand on it, measured against an ordinary Chrome on the same
 machine and brought to match it.
 

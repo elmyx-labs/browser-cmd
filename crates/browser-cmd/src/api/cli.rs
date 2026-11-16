@@ -3,9 +3,10 @@
 
 use crate::api::client::Daemon;
 use crate::api::command;
+use crate::api::trace::trace;
 use crate::text::fence::{STATE, unfenced};
 use crate::{Error, Result};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 /// How much of a failure's reason is repeated on stderr, which survives an
 /// agent sending the output to `/dev/null`.
@@ -30,6 +31,8 @@ pub async fn run(argv: &[String]) -> Result<()> {
     match name.as_str() {
         "batch" => return batch().await,
         "restart" => return restart().await,
+        "doctor" => return crate::api::doctor::run().await,
+        "skill" => return crate::api::skill::run(rest),
         "back" | "forward" => {
             let argv: Vec<String> =
                 ["navigate".into(), name.clone()].into_iter().chain(rest.to_vec()).collect();
@@ -38,13 +41,15 @@ pub async fn run(argv: &[String]) -> Result<()> {
         _ => {}
     }
     // A health check that starts nothing: is the daemon up, and what is open.
-    if command::LOCAL.contains(&name.as_str()) {
+    if name == "status" {
         let address = crate::api::http::address();
         let this = crate::api::http::SERVER;
         match crate::api::client::daemon_at(&address, &crate::api::http::Limits::from_env()?).await? {
             Some(build) if build == this => println!("daemon: up at {address}"),
+            Some(build) if !build.starts_with("browser-cmd/") => {
+                println!("daemon: down ({address} is taken by something that is not browser-cmd)");
+            }
             Some(build) => {
-                let build = if build.is_empty() { "an older build".to_owned() } else { build };
                 println!(
                     "daemon: up at {address}, but it is {build} and this is {this}; the next command replaces it"
                 );
@@ -82,7 +87,7 @@ pub async fn run(argv: &[String]) -> Result<()> {
     let reply = match daemon.call(command.name, arguments).await {
         Ok(reply) => reply,
         Err(error) => {
-            trace(&daemon, argv, &error.to_string()).await;
+            trace(&daemon, argv, &error.to_string(), false).await;
             return Err(error);
         }
     };
@@ -101,7 +106,7 @@ pub async fn run(argv: &[String]) -> Result<()> {
             if reply.unacknowledged() { "unknown" } else { "error" },
             reply.error.as_deref().unwrap_or("tool")
         );
-        trace(&daemon, argv, &reply.output).await;
+        trace(&daemon, argv, &reply.output, !reply.unacknowledged()).await;
         return Err(if reply.unacknowledged() {
             Error::Unacknowledged(command.name.into())
         } else {
@@ -227,29 +232,6 @@ fn unwrapped(name: &str, output: &str) -> String {
     match serde_json::from_str::<Value>(&body) {
         Ok(value) if name == "eval" => value.to_string(),
         _ => body,
-    }
-}
-
-/// Best-effort, so a failed step can be understood without re-running it.
-async fn trace(daemon: &Daemon, argv: &[String], error: &str) {
-    if crate::env::flag("NO_TRACE").ok().flatten() == Some(true) {
-        return;
-    }
-    let logs = daemon.call("console", json!({})).await.ok().map(|reply| reply.output);
-    let when = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or_default();
-    let body = format!(
-        "command: {}\nerror: {error}\n\nbrowser log:\n{}\n",
-        argv.join(" "),
-        logs.as_deref().unwrap_or("(none)")
-    );
-    let dir = std::path::Path::new(".browser-cmd").join("traces");
-    if std::fs::create_dir_all(&dir).is_ok() {
-        let path = dir.join(format!("{when}.txt"));
-        let _ = std::fs::write(&path, body);
-        eprintln!("browser-cmd: trace written to {}", path.display());
     }
 }
 

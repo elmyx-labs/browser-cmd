@@ -65,7 +65,11 @@ find it can use the upstream. Requests do not fall back to a direct connection w
 - The profile directory holds cookies, sign-ins, history and cache.
 - `<workspace>/.browser-cmd/` holds tab records and long page text; `<workspace>/media/browser/` holds
   screenshots, saved documents and downloads.
-- `.browser-cmd/traces/` in the working directory gets one file per failed command, with the full command
-  line (including any text it typed) and the page's console log. Set `BROWSER_CMD_NO_TRACE=1` to disable.
+- `.browser-cmd/traces/` in the working directory gets one file per failed command, readable by its owner
+  only, with the command line and the page's console log; the last 50 are kept. The text a `type` typed
+  is left out, since it may be a password; other commands are recorded as given. Set
+  `BROWSER_CMD_NO_TRACE=1` to disable.
+- `~/.browser-cmd/daemon-ADDRESS.log` holds what the daemon said outside any command: its start, and the
+  error or panic it ended on.
 
 Keep these out of version control and delete them when a session handled sensitive data.

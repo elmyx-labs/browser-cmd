@@ -20,7 +20,7 @@ use serde_json::json;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::chrome::cdp::Cdp;
-use crate::chrome::discover::{active_port, debugger_url, preferred_stable_chrome};
+use crate::chrome::discover::{active_port, chrome_to_launch, debugger_url};
 use crate::{Error, Result, Settings};
 use arguments::arguments;
 
@@ -118,9 +118,7 @@ pub(crate) async fn released(profile: &Path, deadline: tokio::time::Instant) -> 
 /// Start Chrome and read where it listens off its stderr, which is the one
 /// place it says so.
 async fn spawn(settings: &Settings, proxy: Option<SocketAddr>) -> Result<(tokio::process::Child, String)> {
-    let executable = settings.executable.clone().or_else(preferred_stable_chrome).ok_or_else(|| {
-        Error::Config("cannot find Chrome; install it or set BROWSER_CMD_EXECUTABLE".into())
-    })?;
+    let executable = chrome_to_launch(settings.executable.as_deref())?;
     std::fs::create_dir_all(&settings.profile)?;
     owner_only(&settings.profile)?;
     std::fs::write(settings.profile.join(LAUNCH_RECORD), launch_record(settings))?;
@@ -156,11 +154,18 @@ async fn spawn(settings: &Settings, proxy: Option<SocketAddr>) -> Result<(tokio:
             Ok((child, url))
         }
         Ok(Err(said)) => Err(Error::Tool(format!(
-            "Chrome exited before opening its DevTools port (is the profile {} open in another \
-             Chrome?): {said}",
-            settings.profile.display()
+            "Chrome exited before opening its DevTools port ({}): {said}",
+            why_it_left(&said, settings)
         ))),
         Err(_) => Err(Error::Tool("Chrome did not open its DevTools port in time".into())),
+    }
+}
+
+/// The likeliest reason for what Chrome said as it left.
+fn why_it_left(said: &str, settings: &Settings) -> String {
+    match said.to_ascii_lowercase().contains("sandbox") {
+        true => "a container or root cannot run Chrome's sandbox: set BROWSER_CMD_NO_SANDBOX=1".into(),
+        false => format!("is the profile {} open in another Chrome?", settings.profile.display()),
     }
 }
 

@@ -4,6 +4,8 @@ on:
   push:
     branches: [main, develop]
   pull_request:
+  # The release runs these same checks before it builds anything.
+  workflow_call:
 
 permissions:
   contents: read
@@ -25,6 +27,18 @@ jobs:
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
       # Tests that need Chrome are #[ignore]d and do not run here.
       - run: cargo test --workspace --locked
+
+  chrome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # The runner's Chrome, on the fixtures the tests serve; its sandbox needs what a hosted runner withholds.
+      - run: cargo test --workspace --locked -- --include-ignored --skip public_
+        env:
+          BROWSER_CMD_HEADLESS: 1
+          BROWSER_CMD_NO_SANDBOX: 1
 
   packaging:
     runs-on: ubuntu-latest

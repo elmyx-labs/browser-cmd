@@ -11,7 +11,7 @@
 //! its session id rides on every command sent to it.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         Arc, Mutex, MutexGuard,
         atomic::{AtomicBool, AtomicU64, Ordering},
@@ -66,6 +66,8 @@ pub(crate) struct Cdp {
     next: Arc<AtomicU64>,
     alive: Arc<AtomicBool>,
     timeout: Duration,
+    /// The tabs whose last command went unanswered.
+    stalled: Arc<Mutex<HashSet<String>>>,
     events: Arc<Mutex<Events>>,
     tasks: Vec<JoinHandle<()>>,
 }
@@ -152,6 +154,7 @@ impl Cdp {
             next,
             alive,
             timeout,
+            stalled: Arc::default(),
             events,
             tasks: vec![writer, reader],
         })
@@ -308,9 +311,23 @@ impl Cdp {
     /// itself is asked something cheap: if it does not answer either, the
     /// connection is given up, so the next command reconnects and re-attaches
     /// instead of waiting out every timeout on it. Nothing is replayed.
+    ///
+    /// A tab that left one command unanswered gets the short wait for the
+    /// next, until it answers again: a command is many calls, and a tab that
+    /// has stopped answering would otherwise cost each of them the full wait.
     pub(crate) async fn call(&self, session: Option<&str>, method: &str, params: Value) -> Result<Value> {
-        let answer = self.request(session, method, params, self.timeout).await;
-        if matches!(answer, Err(Error::Unacknowledged(_)))
+        let stalled = session.is_some_and(|session| self.stalled.lock().unwrap().contains(session));
+        let patience = if stalled { PROBE.min(self.timeout) } else { self.timeout };
+        let answer = self.request(session, method, params, patience).await;
+        let unanswered = matches!(answer, Err(Error::Unacknowledged(_)));
+        if let Some(session) = session {
+            let mut stalled = self.stalled.lock().unwrap();
+            match unanswered {
+                true => stalled.insert(session.to_owned()),
+                false => stalled.remove(session),
+            };
+        }
+        if unanswered
             && self.request(None, "Browser.getVersion", json!({}), PROBE.min(self.timeout)).await.is_err()
         {
             self.disconnect();
@@ -368,6 +385,7 @@ impl Cdp {
             next: Arc::new(AtomicU64::new(1)),
             alive: Arc::new(AtomicBool::new(alive)),
             timeout,
+            stalled: Arc::default(),
             events: Arc::default(),
             tasks: Vec::new(),
         };
@@ -455,6 +473,34 @@ mod tests {
         let lost = cdp.call(Some("busy"), "Runtime.evaluate", json!({})).await;
         assert!(matches!(lost, Err(Error::Unacknowledged(_))), "{lost:?}");
         assert!(cdp.alive());
+        browser.abort();
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_tab_that_left_a_command_unanswered_gets_the_short_wait_until_it_answers() {
+        let (client, mut queue) = Cdp::fixture(true, Duration::from_secs(20));
+        let cdp = Arc::new(client);
+        let answering = cdp.clone();
+        // A browser that answers for itself and for the tab's `Runtime.evaluate`, never for its input.
+        let browser = tokio::spawn(async move {
+            while let Some(line) = queue.recv().await {
+                let message: Value = serde_json::from_str(&line).unwrap();
+                if message["method"] != "Input.dispatchMouseEvent" {
+                    let id = message["id"].as_u64().unwrap();
+                    let waiter = answering.waiting.lock().unwrap().remove(&id).unwrap();
+                    let _ = waiter.answer.send(Ok(json!({})));
+                }
+            }
+        });
+        let waited = async |method: &str| {
+            let began = tokio::time::Instant::now();
+            let answer = cdp.call(Some("tab"), method, json!({})).await;
+            (answer.is_ok(), began.elapsed())
+        };
+        assert_eq!(waited("Input.dispatchMouseEvent").await, (false, Duration::from_secs(20)));
+        assert_eq!(waited("Input.dispatchMouseEvent").await, (false, PROBE));
+        assert!(waited("Runtime.evaluate").await.0);
+        assert_eq!(waited("Input.dispatchMouseEvent").await, (false, Duration::from_secs(20)));
         browser.abort();
     }
 

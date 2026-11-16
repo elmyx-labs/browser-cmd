@@ -12,7 +12,11 @@ env:
   SKILL: plugin/skills/browser-cmd/SKILL.md
 
 jobs:
+  check:
+    uses: ./.github/workflows/ci.yml
+
   build:
+    needs: check
     strategy:
       fail-fast: false
       matrix:
@@ -39,6 +43,8 @@ jobs:
         run: |
           for target in ${TARGETS//,/ }; do
             cargo build --release --locked --target "$target"
+            # A binary that does not start is not published.
+            "target/$target/release/browser-cmd" --version
             name=browser-cmd-$target
             mkdir -p "$name/skills/browser-cmd"
             cp LICENSE README.md "$name/"

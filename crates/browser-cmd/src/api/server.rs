@@ -178,6 +178,11 @@ async fn dispatch(
     request_deadline: tokio::time::Instant,
 ) -> String {
     let refuse = |status: &str| respond(&state.limits, status, None, String::new());
+    // A command that was not started says so and why: nothing happened in the browser.
+    let not_started = |why: String| {
+        let outcome = Outcome::failed(format!("Error: not started, so nothing was done: {why}"), "tool");
+        respond(&state.limits, "200 OK", None, serde_json::to_string(&outcome).unwrap_or_default())
+    };
     let Ok(asked) = serde_json::from_slice::<Request>(body) else {
         return refuse("400 Bad Request");
     };
@@ -197,7 +202,10 @@ async fn dispatch(
     // A request that waited behind the `close` ending its session opens a new one under the name.
     let finished = loop {
         let Some(session) = open(state, &id) else {
-            return refuse("503 Service Unavailable");
+            return not_started(format!(
+                "the daemon already holds {} sessions; `close` one that is done with",
+                state.limits.sessions
+            ));
         };
         // The command runs in a task of its own, so its caller can be
         // answered at the deadline while it finishes: dropping it
@@ -227,7 +235,13 @@ async fn dispatch(
         match tokio::time::timeout_at(request_deadline, began).await {
             Ok(Ok(true)) => break finished,
             Ok(Ok(false)) => {}
-            _ => return refuse("503 Service Unavailable"),
+            _ => {
+                return not_started(format!(
+                    "an earlier command in session {id} was still running after {:.0} s. Look at the page \
+                     before going on",
+                    (request_deadline - started).as_secs_f64()
+                ));
+            }
         }
     };
     let outcome = match tokio::time::timeout_at(request_deadline, finished).await {
@@ -440,10 +454,14 @@ mod http_tests {
             .run_until(async {
                 let (state, _temp) = state();
                 assert!(exchange(state.clone(), &ask("one")).await.starts_with("HTTP/1.1 200"));
-                assert!(exchange(state.clone(), &ask("two")).await.starts_with("HTTP/1.1 503"));
+                assert!(exchange(state.clone(), &ask("two")).await.contains("already holds 1 sessions"));
                 let session = state.sessions.borrow()["one"].clone();
                 let held = session.lock().await;
-                assert!(exchange(state.clone(), &ask("one")).await.starts_with("HTTP/1.1 503"));
+                let queued = exchange(state.clone(), &ask("one")).await;
+                assert!(
+                    queued.contains("not started") && queued.contains("session one was still running"),
+                    "{queued}"
+                );
                 drop(held);
                 assert!(exchange(state, &ask("one")).await.starts_with("HTTP/1.1 200"));
             })

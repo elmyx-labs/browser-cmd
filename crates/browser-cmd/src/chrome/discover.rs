@@ -23,8 +23,42 @@ const VERSION_BYTES: usize = 64 * 1024;
 /// on Spotlight, which a server may have switched off and which answers
 /// nothing under load; then anything named chrome on `PATH`; then, on macOS,
 /// wherever Spotlight says a bundle is, for an install somewhere unusual.
-pub(crate) fn preferred_stable_chrome() -> Option<PathBuf> {
-    standard_locations().into_iter().chain(chrome_on_path()).chain(spotlight_bundles()).find(is_stable_chrome)
+fn preferred_stable_chrome() -> Option<PathBuf> {
+    standard_locations()
+        .into_iter()
+        .chain(on_path("chrome"))
+        .chain(spotlight_bundles())
+        .find(is_stable_chrome)
+}
+
+/// The Chrome a launch uses: the one `named`, else the stable one found here,
+/// else an error naming what was found and passed over.
+pub(crate) fn chrome_to_launch(named: Option<&Path>) -> Result<PathBuf> {
+    named.map(Path::to_owned).or_else(preferred_stable_chrome).ok_or_else(|| {
+        let others: Vec<String> = passed_over().iter().map(|path| path.display().to_string()).collect();
+        let others = match others.is_empty() {
+            true => String::new(),
+            false => format!(" (found, and passed over as not that: {})", others.join(", ")),
+        };
+        Error::Config(format!(
+            "cannot find a stable Google Chrome{others}; install it, or name another browser in \
+             BROWSER_CMD_EXECUTABLE"
+        ))
+    })
+}
+
+/// The browsers found here that are not a stable Google Chrome — Chromium, a
+/// Beta, a "for Testing" build.
+fn passed_over() -> Vec<PathBuf> {
+    let mut found: Vec<PathBuf> = standard_locations()
+        .into_iter()
+        .chain(on_path("chrom"))
+        .chain(spotlight_bundles())
+        .filter(|candidate| candidate.is_file() && !is_stable_chrome(candidate))
+        .collect();
+    found.sort();
+    found.dedup();
+    found
 }
 
 fn standard_locations() -> Vec<PathBuf> {
@@ -49,7 +83,7 @@ fn standard_locations() -> Vec<PathBuf> {
     }
 }
 
-fn chrome_on_path() -> Vec<PathBuf> {
+fn on_path(named: &str) -> Vec<PathBuf> {
     let Some(path) = std::env::var_os("PATH") else { return Vec::new() };
     std::env::split_paths(&path)
         .filter_map(|directory| std::fs::read_dir(directory).ok())
@@ -57,7 +91,7 @@ fn chrome_on_path() -> Vec<PathBuf> {
         .filter_map(|entry| {
             let path = entry.ok()?.path();
             let name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
-            (name.contains("chrome") && !name.contains("driver")).then_some(path)
+            (name.contains(named) && !name.contains("driver")).then_some(path)
         })
         .collect()
 }

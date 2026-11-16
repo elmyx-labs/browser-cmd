@@ -19,8 +19,7 @@ pub(crate) struct Daemon {
 }
 
 /// What answers at `address`: nothing, or the build a daemon says it is in
-/// its `Server` header (empty for one too old to say, or something else
-/// altogether on the port).
+/// its `Server` header (empty for something else altogether on the port).
 pub(crate) async fn daemon_at(address: &str, limits: &Limits) -> Result<Option<String>> {
     http::endpoint(address)?;
     let probe = async {
@@ -37,6 +36,18 @@ pub(crate) async fn daemon_at(address: &str, limits: &Limits) -> Result<Option<S
         }))
     };
     Ok(tokio::time::timeout(limits.io, probe).await.ok().flatten().map(Option::unwrap_or_default))
+}
+
+/// The daemon's log, opened for it to write to: what the last daemon said is
+/// kept until the file is large, and nowhere at all if it cannot be opened.
+fn log(address: &str) -> std::process::Stdio {
+    const KEPT: u64 = 1 << 20;
+    let path = crate::api::app::log(address);
+    let _ = path.parent().map(std::fs::create_dir_all);
+    let large = std::fs::metadata(&path).is_ok_and(|log| log.len() > KEPT);
+    let opened =
+        std::fs::OpenOptions::new().create(true).append(!large).write(true).truncate(large).open(&path);
+    opened.map_or_else(|_| std::process::Stdio::null(), std::process::Stdio::from)
 }
 
 /// Stop the daemon at `address` and wait for it to go; it closes its Chrome
@@ -102,7 +113,15 @@ impl Daemon {
         match daemon_at(&daemon.address, &daemon.limits).await? {
             Some(build) if build == http::SERVER => return Ok(daemon),
             // A daemon of another build makes way for one of this one.
-            Some(_) => stop(&daemon.address, &daemon.limits).await?,
+            Some(build) if build.starts_with("browser-cmd/") => stop(&daemon.address, &daemon.limits).await?,
+            // Anything else is not ours to stop, or to send a token to.
+            Some(_) => {
+                return Err(Error::Tool(format!(
+                    "{} is taken by something that is not browser-cmd; set BROWSER_CMD_ADDR to a free \
+                     HOST:PORT",
+                    daemon.address
+                )));
+            }
             None => {}
         }
         if !http::endpoint(&daemon.address).is_ok_and(|url| http::loopback(&url)) {
@@ -116,7 +135,7 @@ impl Daemon {
             .arg(&daemon.address)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
+            .stderr(log(&daemon.address))
             .spawn()
             .map_err(|error| Error::Tool(format!("cannot start the browser daemon: {error}")))?;
         let ready = async {
@@ -125,7 +144,10 @@ impl Daemon {
                     return Ok(());
                 }
                 if let Some(status) = child.try_wait()? {
-                    return Err(Error::Tool(format!("browser daemon exited during startup: {status}")));
+                    return Err(Error::Tool(format!(
+                        "browser daemon exited during startup: {status}; what it said is in {}",
+                        crate::api::app::log(&daemon.address).display()
+                    )));
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }

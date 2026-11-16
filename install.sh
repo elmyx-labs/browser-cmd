@@ -63,9 +63,10 @@ sha256() {
 	if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1
 }
 
-# Copies a file into a directory that may be outside what a sandbox lets this script write.
+# Copies a file into a directory that may be outside what a sandbox lets this script write. The copy
+# lands beside its place and is moved onto it, so a running browser-cmd keeps the file it started from.
 put() {
-	mkdir -p "$2" && cp "$1" "$2/$3" || fail "could not write $2/$3; run this installer outside the sandbox, or as the user who owns $2"
+	mkdir -p "$2" && cp "$1" "$2/.$3.new" && mv -f "$2/.$3.new" "$2/$3" || fail "could not write $2/$3; run this installer outside the sandbox, or as the user who owns $2"
 }
 
 tmp=$(mktemp -d)

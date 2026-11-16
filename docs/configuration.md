@@ -86,10 +86,13 @@ closes gracefully, and a new daemon starts with the current settings.
 | `<workspace>/media/browser/` | Screenshots and saved documents (such as PDFs). |
 | `<workspace>/media/browser/downloads/` | Files the page downloads. |
 | `./.browser-cmd/used` | An empty marker that browser-cmd ran a command in this directory. |
-| `./.browser-cmd/traces/` | A trace per failed command (the command, the error and the browser log), in the directory the command ran in. |
+| `./.browser-cmd/traces/` | A trace per failed command (the command without what `type` typed, the error and the browser log), in the directory the command ran in; the last 50 are kept. |
+| `~/.browser-cmd/daemon-ADDRESS.log` | What the daemon at that address said outside any command: its start, and the error or panic it ended on. Started over once it passes 1 MB. |
 
 `<workspace>` is the workspace of the directory the daemon was started from. A daemon started by a
 command in one project and then used from another keeps writing to the first one's workspace; give each
-project its own `BROWSER_CMD_ADDR` when that matters. `upload` only accepts files inside the workspace.
+project its own `BROWSER_CMD_ADDR` when that matters, and with it its own `BROWSER_CMD_PROFILE`: two
+daemons on one profile share one Chrome, so either one stopping closes it for both, and downloads land
+in the workspace of whichever started last. `upload` only accepts files inside the workspace.
 
 Add `.browser-cmd/` (and `media/browser/` if you do not want screenshots tracked) to your `.gitignore`.

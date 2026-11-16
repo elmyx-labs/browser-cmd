@@ -6,8 +6,10 @@ use std::time::Duration;
 use crate::{Error, Result};
 
 pub(crate) const ENDPOINT: &str = "/call";
+/// The version, and the commit this was built from when there was one (`build.rs`).
+pub(crate) const BUILD: &str = env!("BROWSER_CMD_BUILD");
 /// What the daemon says it is in every answer, so a client of another build replaces it.
-pub(crate) const SERVER: &str = concat!("browser-cmd/", env!("CARGO_PKG_VERSION"));
+pub(crate) const SERVER: &str = concat!("browser-cmd/", env!("BROWSER_CMD_BUILD"));
 pub(crate) const SESSION_HEADER: &str = "browser-session";
 
 const DEFAULT_ADDRESS: &str = "127.0.0.1:7788";

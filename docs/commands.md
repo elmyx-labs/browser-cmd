@@ -9,13 +9,15 @@ Every command below is also documented by the binary itself: `browser-cmd --help
 ```
 browser-cmd <command> [args]     run one browser action against the warm daemon
 browser-cmd status               whether the daemon is up, and the local date and time zone
+browser-cmd doctor               what a command would run into: the build, the Chrome found, the daemon, the skill each agent reads; starts nothing
+browser-cmd skill [install]      print this build's agent skill, or write it where Claude Code, Codex and Pi read skills
 browser-cmd restart              stop the daemon (its Chrome closes) and start it again with the current settings
 browser-cmd batch <<'EOF'        several commands, one per line, in one call
 browser-cmd back | forward       the same as navigate back | navigate forward
 browser-cmd --serve [ADDR]       run the daemon in the foreground (default 127.0.0.1:7788)
 browser-cmd --help               the command catalogue
 browser-cmd <command> --help     one command's syntax
-browser-cmd --version            the version
+browser-cmd --version            the version, and the commit it was built from
 ```
 
 The first command starts the daemon in the background when nothing answers at `BROWSER_CMD_ADDR`. The

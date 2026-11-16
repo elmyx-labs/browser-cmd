@@ -10,7 +10,7 @@ pub async fn run() -> i32 {
     let flags = argv.iter().take_while(|arg| matches!(arg.as_str(), "--brief" | "--raw")).count();
     argv.rotate_left(flags);
     if argv == ["--version"] {
-        println!("browser-cmd {}", env!("CARGO_PKG_VERSION"));
+        println!("browser-cmd {}", http::BUILD);
         return 0;
     }
     // Nothing asked: print help rather than start a browser.
@@ -37,12 +37,21 @@ pub async fn run() -> i32 {
     }
 }
 
+/// Where browser-cmd keeps what outlives a command: `~/.browser-cmd`.
+pub(crate) fn home() -> std::path::PathBuf {
+    std::env::var_os("HOME").map_or_else(|| ".".into(), std::path::PathBuf::from).join(".browser-cmd")
+}
+
 /// The daemon's settings: its home under `$HOME`, its workspace the one its
 /// spawner is in, not the directory within it.
 pub(crate) fn settings() -> Result<Settings> {
-    let home =
-        std::env::var_os("HOME").map_or_else(|| ".".into(), std::path::PathBuf::from).join(".browser-cmd");
-    Settings::from_env(&home, &crate::workspace::root(&std::env::current_dir()?))
+    Settings::from_env(&home(), &crate::workspace::root(&std::env::current_dir()?))
+}
+
+/// What the daemon at `address` says outside any command — that it started, a
+/// panic, the error it ended on — is kept here: it has no terminal.
+pub(crate) fn log(address: &str) -> std::path::PathBuf {
+    home().join(format!("daemon-{}.log", address.replace([':', '/', '\\'], "-")))
 }
 
 async fn daemon(argv: &[String]) -> Result<()> {
@@ -59,5 +68,11 @@ async fn daemon(argv: &[String]) -> Result<()> {
     let settings = settings()?;
     let (limits, token) = (http::Limits::from_env()?, http::token()?);
     let listener = tokio::net::TcpListener::bind(&address).await?;
+    eprintln!(
+        "browser-cmd: build {}, process {}, workspace {}",
+        http::BUILD,
+        std::process::id(),
+        settings.workspace.display()
+    );
     server::serve(listener, Host::new(settings), limits, token).await
 }

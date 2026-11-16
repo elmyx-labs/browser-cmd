@@ -31,13 +31,16 @@ fn command_help_does_not_connect_to_or_start_a_browser() {
 }
 
 #[test]
-fn version_prints_the_crate_version() {
+fn version_prints_the_crate_version_and_the_commit_it_was_built_from() {
     let output = Command::new(env!("CARGO_BIN_EXE_browser-cmd")).arg("--version").output().unwrap();
     assert!(output.status.success());
-    assert_eq!(
-        String::from_utf8(output.stdout).unwrap(),
-        format!("browser-cmd {}\n", env!("CARGO_PKG_VERSION"))
-    );
+    let said = String::from_utf8(output.stdout).unwrap();
+    let build = said.trim_end().strip_prefix(concat!("browser-cmd ", env!("CARGO_PKG_VERSION"))).unwrap();
+    // In a checkout the commit follows; a source archive has none to name.
+    assert!(build.is_empty() || build.starts_with('+'), "{said}");
+    let checkout =
+        Command::new("git").args(["rev-parse", "HEAD"]).output().is_ok_and(|git| git.status.success());
+    assert_eq!(checkout, !build.is_empty(), "{said}");
 }
 
 /// docs/commands.md carries every command's syntax as its own --help gives it.
