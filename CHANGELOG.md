@@ -23,8 +23,17 @@ What surrounds the commands: telling builds apart, releasing, and finding out wh
   Chrome leaving over its sandbox: the message names `BROWSER_CMD_NO_SANDBOX`.
 - Something that is not browser-cmd on the daemon's port is reported as that, and is no longer asked to
   restart.
-- Releases run the checks CI runs before building, and start each binary once before publishing it; CI
-  runs the real-Chrome tests on Linux.
+- A profile belongs to one daemon at a time: a second daemon started on it says so instead of sharing
+  the first one's Chrome and closing it on the way out.
+- A loopback daemon requires a token it makes for itself and keeps where only its user reads it, so
+  another user of the machine cannot drive it; commands find the token by themselves.
+- `stop` stops the daemon and its Chrome. `BROWSER_CMD_STOP_IDLE_SECS` makes a daemon stop by itself
+  once unused that long, for a server or CI; unset, it never does.
+- Long page text and network bodies saved to the workspace keep their newest 200 of each kind, so the
+  names never run out.
+- Releases run the checks CI runs before building, start each binary once before publishing it, attest
+  where each archive was built, and refuse a tag that already has a release. CI runs the real-Chrome
+  tests on Linux, macOS and Windows, on a pinned toolchain.
 
 What a page sees of the browser and of the hand on it, measured against an ordinary Chrome on the same
 machine and brought to match it.

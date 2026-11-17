@@ -6,13 +6,25 @@ on:
 
 permissions:
   contents: write
+  # For the attestation of where each archive was built.
+  id-token: write
+  attestations: write
 
 env:
   # The agent skill shipped in each archive as skills/browser-cmd/SKILL.md (installed for Claude Code, Codex and Pi by install.sh).
   SKILL: plugin/skills/browser-cmd/SKILL.md
 
 jobs:
+  # A version is released once: a tag pushed again is not built over the release it already has.
+  unreleased:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: '! gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY"'
+
   check:
+    needs: unreleased
     uses: ./.github/workflows/ci.yml
 
   build:
@@ -34,7 +46,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: The tag is the crate version
         run: test "${GITHUB_REF_NAME#v}" = "$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)"
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.92.0
         with:
           targets: ${{ matrix.targets }}
       - if: contains(matrix.targets, 'musl')
@@ -77,6 +89,11 @@ jobs:
       - name: Checksums
         working-directory: dist
         run: sha256sum browser-cmd-* > SHA256SUMS
+      # Signed by GitHub, so `gh attestation verify ARCHIVE --repo elmyx-labs/browser-cmd` says the
+      # archive was built here from this tag, which a checksum beside it cannot.
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/browser-cmd-*
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

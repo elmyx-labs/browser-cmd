@@ -44,7 +44,7 @@ closes gracefully, and a new daemon starts with the current settings.
 | `BROWSER_CMD_HEADLESS` | headless only without a display | Yes/no. macOS and Windows always have a display; Linux has one when `DISPLAY` or `WAYLAND_DISPLAY` is set. A page can tell a headless browser from one with a window: it refuses a permission request at once, `print()` and fullscreen do nothing a window does, and a sandboxed frame or a shared or service worker can name it headless. For a site that checks, run headed (under a virtual display on a server). |
 | `BROWSER_CMD_NO_SANDBOX` | no | Yes/no: pass `--no-sandbox`, for containers that cannot run Chrome's sandbox. |
 | `BROWSER_CMD_ARGS` | none | Extra Chrome flags, split on whitespace, added after browser-cmd's own. |
-| `BROWSER_CMD_WINDOW` | `1440,900` | `WIDTH,HEIGHT` of the headless window in CSS pixels. |
+| `BROWSER_CMD_WINDOW` | `1440,900` | `WIDTH,HEIGHT` of the headless window in CSS pixels. The screen around it is a laptop's on macOS (1512×982 at 2x) and a desktop's elsewhere (1920×1080); a headed browser has the real one. |
 | `BROWSER_CMD_LANGUAGE` | `en-US,en` | Comma-separated language tags for `Accept-Language` and `navigator.languages`. |
 | `BROWSER_CMD_TIMEZONE` | the machine's | IANA zone (such as `Europe/Berlin`) Chrome runs in, passed to Chrome as `TZ`. |
 | `BROWSER_CMD_PROXY` | none | Upstream proxy: `http://[user:pass@]host[:port]` or `socks5://[user:pass@]host[:port]` (`socks://` is the same; `socks5h://` is refused because names are resolved locally). Chrome reaches it through a forwarder on a loopback port, which adds the credentials; QUIC and non-proxied WebRTC UDP are disabled, and autoplay needs a user gesture. If the upstream fails, requests fail rather than going direct. |
@@ -63,9 +63,10 @@ closes gracefully, and a new daemon starts with the current settings.
 | `BROWSER_CMD_ADDR` | `127.0.0.1:7788`, `127.0.0.1:7789` under `BROWSER_CMD_CHROME=mine` | `HOST:PORT` of the daemon, for both the client and `--serve` without an address. A client only starts a daemon itself on a loopback address. |
 | `BROWSER_CMD_SESSION` | one per workspace | Session name. By default every command in the same workspace shares one session (its tabs and refs); a name gives two callers in one workspace separate sessions. |
 | `BROWSER_CMD_WORKSPACE` | git work tree, else the working directory | The workspace root: what the default session is named after, and, for the daemon, where its files go (see below). |
-| `BROWSER_CMD_RPC_TOKEN` | none | Bearer token the client sends and the daemon requires. Required for a daemon listening off loopback. Visible ASCII only. |
+| `BROWSER_CMD_RPC_TOKEN` | one the daemon makes | Bearer token the client sends and the daemon requires. A loopback daemon without one makes its own and keeps it in `~/.browser-cmd/daemon-ADDRESS.token`, readable by its user only. Required for a daemon listening off loopback. Visible ASCII only. |
 | `BROWSER_CMD_RPC_SECS` | `600` | Client-side deadline for one command, in seconds. The daemon also answers each request within 100 seconds (or this value, if lower) and reports the outcome as unknown when a command runs longer. |
 | `BROWSER_CMD_IDLE_SECS` | `7200` | How long a session may sit unused before the daemon lets it go. |
+| `BROWSER_CMD_STOP_IDLE_SECS` | unset | The daemon stops, closing its Chrome, after this long without a command; the next command starts it again. Unset, it never stops by itself: on a desktop its tabs may be what a person is reading. For a server or CI, where nobody is. |
 | `BROWSER_CMD_NO_SPAWN` | no | Yes/no: never start a daemon or a browser. A command fails if no daemon answers, and `--serve` refuses to run. For sandboxes where the browser belongs to someone else. |
 | `BROWSER_CMD_BRIEF` | no | Yes/no: print one line for each action that worked, as `--brief` does. |
 | `BROWSER_CMD_NO_TRACE` | no | Yes/no: do not write failure traces. |
@@ -77,12 +78,20 @@ closes gracefully, and a new daemon starts with the current settings.
 - `HOME`: the daemon's home directory is `$HOME/.browser-cmd` (the current directory's `.browser-cmd` if
   `HOME` is unset).
 
+## What is typed, and how
+
+`type` presses a key for every character a US keyboard has, held as a finger holds it and with Shift
+for capitals and symbols, so a page sees `keydown`, `keypress`, `input` and `keyup` for each. Any other
+character — Cyrillic, an accented letter, an emoji — is inserted as text, which a page sees as `input`
+without key events, the way it sees a paste or an input method. Both reach every field; a page that
+watches for keystrokes sees the difference.
+
 ## Files
 
 | Path | What is there |
 | --- | --- |
 | `~/.browser-cmd/browser/default/` | The default Chrome profile, plus `browser-cmd-launch`, the command line it was started with (a Chrome left running on the profile is reused only if it matches). |
-| `<workspace>/.browser-cmd/` | Session tab records (`tabs-*.json`), long text and network bodies saved whole (`text-NNNN.txt`, …). |
+| `<workspace>/.browser-cmd/` | Session tab records (`tabs-*.json`), long text and network bodies saved whole (`text-NNNN.txt`, …); the newest 200 of each kind are kept. |
 | `<workspace>/media/browser/` | Screenshots and saved documents (such as PDFs). |
 | `<workspace>/media/browser/downloads/` | Files the page downloads. |
 | `./.browser-cmd/used` | An empty marker that browser-cmd ran a command in this directory. |
@@ -91,8 +100,7 @@ closes gracefully, and a new daemon starts with the current settings.
 
 `<workspace>` is the workspace of the directory the daemon was started from. A daemon started by a
 command in one project and then used from another keeps writing to the first one's workspace; give each
-project its own `BROWSER_CMD_ADDR` when that matters, and with it its own `BROWSER_CMD_PROFILE`: two
-daemons on one profile share one Chrome, so either one stopping closes it for both, and downloads land
-in the workspace of whichever started last. `upload` only accepts files inside the workspace.
+project its own `BROWSER_CMD_ADDR` when that matters, and with it its own `BROWSER_CMD_PROFILE`: a
+profile belongs to one daemon at a time, and a second daemon started on it says so. `upload` only accepts files inside the workspace.
 
 Add `.browser-cmd/` (and `media/browser/` if you do not want screenshots tracked) to your `.gitignore`.

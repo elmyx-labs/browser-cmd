@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 
 use crate::{Error, Result, Settings};
 
+/// Saved texts of one kind kept in a workspace. A text is what a page said, to
+/// be read again in the same task; a screenshot is evidence, and is never removed.
+const TEXTS_KEPT: usize = 200;
+
 /// Bytes kept under the next free `kind-NNNN.ext` from `first`: text beside the
 /// workspace's own state, media with the screenshots. Answers with the number used.
 pub(crate) fn spill(
@@ -19,13 +23,37 @@ pub(crate) fn spill(
         "txt" => settings.workspace.join(".browser-cmd"),
         _ => settings.screenshots.clone(),
     };
-    save_new(
+    let saved = save_new(
         &directory,
         first,
         settings.limits.screenshots,
         |number| format!("{kind}-{number:04}.{ext}"),
         bytes,
-    )
+    )?;
+    if ext == "txt" {
+        keep_newest(&directory, &format!("{kind}-"), TEXTS_KEPT);
+    }
+    Ok(saved)
+}
+
+/// Remove all but the `kept` most recently written files named `prefix…txt`, so
+/// the names never run out and a workspace does not grow with every long page.
+fn keep_newest(directory: &Path, prefix: &str, kept: usize) {
+    let mut texts: Vec<_> = std::fs::read_dir(directory)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            name.starts_with(prefix) && name.ends_with(".txt")
+        })
+        .filter_map(|entry| Some((entry.metadata().ok()?.modified().ok()?, entry.path())))
+        .collect();
+    texts.sort();
+    for (_, old) in texts.iter().rev().skip(kept) {
+        let _ = std::fs::remove_file(old);
+    }
 }
 
 /// The workspace a directory is in: `BROWSER_CMD_WORKSPACE` when set, else
@@ -91,5 +119,18 @@ mod tests {
         assert_eq!(std::fs::read(first).unwrap(), b"one", "an existing file is never overwritten");
         save_new(temp.path(), 0, 3, name, b"three").unwrap();
         assert!(save_new(temp.path(), 0, 3, name, b"four").is_err());
+    }
+
+    #[test]
+    fn the_newest_saved_texts_are_kept_and_nothing_else_is_removed() {
+        let temp = tempfile::tempdir().unwrap();
+        for name in ["text-0001.txt", "text-0002.txt", "text-0003.txt", "network-0001.txt", "text-0001.png"] {
+            std::fs::write(temp.path().join(name), "").unwrap();
+        }
+        keep_newest(temp.path(), "text-", 2);
+        let mut left: Vec<_> =
+            std::fs::read_dir(temp.path()).unwrap().map(|e| e.unwrap().file_name()).collect();
+        left.sort();
+        assert_eq!(left, ["network-0001.txt", "text-0001.png", "text-0002.txt", "text-0003.txt"]);
     }
 }

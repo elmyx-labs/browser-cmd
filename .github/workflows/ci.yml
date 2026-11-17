@@ -19,7 +19,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.92.0
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
@@ -29,16 +29,19 @@ jobs:
       - run: cargo test --workspace --locked
 
   chrome:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.92.0
       - uses: Swatinem/rust-cache@v2
-      # The runner's Chrome, on the fixtures the tests serve; its sandbox needs what a hosted runner withholds.
+      # The runner's own Chrome, on the fixtures the tests serve.
       - run: cargo test --workspace --locked -- --include-ignored --skip public_
         env:
           BROWSER_CMD_HEADLESS: 1
-          BROWSER_CMD_NO_SANDBOX: 1
 
   packaging:
     runs-on: ubuntu-latest

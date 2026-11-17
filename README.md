@@ -120,7 +120,8 @@ is yours; the skill tells you how.
 
 The installer verifies the release's SHA-256 checksum and puts `browser-cmd` in `~/.local/bin`
 (`BROWSER_CMD_INSTALL_DIR` changes it, `BROWSER_CMD_INSTALL_VERSION=v0.1.0` pins a release,
-`--no-skills` installs only the binary). macOS and Linux, x86_64 and arm64.
+`--no-skills` installs only the binary). macOS and Linux, x86_64 and arm64. Google publishes no Chrome
+for arm64 Linux: there, install Chromium and name it in `BROWSER_CMD_EXECUTABLE`.
 
 <details>
 <summary>Windows, or from source</summary>
@@ -190,8 +191,8 @@ command would run into (no Chrome found, a daemon of another build), and `browse
 every command.
 
 To upgrade, run the installer again: the next command replaces a running daemon of the older build.
-The installer also writes the skill again, so pass `--no-skills` if you have edited yours. To remove browser-cmd, end the daemon's process
-(`browser-cmd --serve`; its Chrome closes with it), then delete the binary, `~/.browser-cmd` and the
+The installer also writes the skill again, so pass `--no-skills` if you have edited yours. To remove browser-cmd, run `browser-cmd stop` (the
+daemon's Chrome closes with it), then delete the binary, `~/.browser-cmd` and the
 `browser-cmd` folder under `~/.claude/skills` and `~/.agents/skills`.
 
 ## Documentation

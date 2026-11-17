@@ -14,6 +14,8 @@ pub struct Host {
     pub(crate) shared: tokio::sync::Mutex<Option<Rc<Shared>>>,
     /// What a layer above keeps of this browser across its connections, opaque here.
     pub(crate) above: std::cell::OnceCell<Rc<dyn std::any::Any>>,
+    /// The profile is this host's while it holds this: see [`Host::own_profile`].
+    pub(crate) owned: std::cell::RefCell<Option<std::fs::File>>,
 }
 
 pub(crate) struct Shared {
@@ -56,7 +58,12 @@ impl Drop for BrowserProcess {
 impl Host {
     #[must_use]
     pub fn new(settings: Settings) -> Rc<Self> {
-        Rc::new(Self { settings, shared: tokio::sync::Mutex::new(None), above: std::cell::OnceCell::new() })
+        Rc::new(Self {
+            settings,
+            shared: tokio::sync::Mutex::new(None),
+            above: std::cell::OnceCell::new(),
+            owned: std::cell::RefCell::new(None),
+        })
     }
 
     pub fn settings(&self) -> &Settings {
@@ -71,6 +78,8 @@ impl Host {
     /// attached to is left as it is.
     pub async fn shutdown(&self) {
         let slot = self.shared.lock().await;
+        // Whatever happens below, the profile is no longer this host's to hold.
+        let _released = self.owned.borrow_mut().take();
         let Some(shared) = slot.as_ref().filter(|_| self.settings.attach.is_none()) else { return };
         let deadline = tokio::time::Instant::now() + self.settings.waits.close;
         let Some(process) = &shared.process else {
@@ -93,6 +102,26 @@ impl Host {
         {
             proxy.0.abort();
         }
+    }
+
+    /// One daemon to a profile: a second would share the first one's Chrome,
+    /// close it for both on its way out and send its downloads elsewhere. The
+    /// lock is the system's, so it goes with the process that held it.
+    fn own_profile(&self) -> Result<()> {
+        if self.owned.borrow().is_some() {
+            return Ok(());
+        }
+        std::fs::create_dir_all(&self.settings.profile)?;
+        let lock = std::fs::File::create(self.settings.profile.join("browser-cmd-owner"))?;
+        lock.try_lock().map_err(|_| {
+            Error::Config(format!(
+                "the profile {} is in use by another browser-cmd daemon; give this one its own \
+                 BROWSER_CMD_PROFILE, or use that daemon's BROWSER_CMD_ADDR",
+                self.settings.profile.display()
+            ))
+        })?;
+        *self.owned.borrow_mut() = Some(lock);
+        Ok(())
     }
 
     /// Ask the browser to close, over a new connection to its endpoint when
@@ -164,6 +193,9 @@ impl Host {
             *slot = Some(shared.clone());
             return Ok(shared);
         }
+        if self.settings.attach.is_none() {
+            self.own_profile()?;
+        }
         let guard = match (&self.settings.proxy, &self.settings.attach) {
             (Some(upstream), None) => {
                 let (address, task) =
@@ -197,5 +229,23 @@ impl Host {
         let shared = Rc::new(shared);
         *slot = Some(shared.clone());
         Ok(shared)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_profile_belongs_to_one_host_until_that_host_is_gone() {
+        let temp = tempfile::tempdir().unwrap();
+        let host = || Host::new(Settings::new(temp.path(), temp.path()));
+        let (first, second) = (host(), host());
+        first.own_profile().unwrap();
+        first.own_profile().unwrap();
+        let refused = second.own_profile().unwrap_err().to_string();
+        assert!(refused.contains("in use by another browser-cmd daemon"), "{refused}");
+        first.owned.borrow_mut().take();
+        second.own_profile().unwrap();
     }
 }

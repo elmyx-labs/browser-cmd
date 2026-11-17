@@ -172,8 +172,14 @@ impl Daemon {
         if body.len() > self.limits.request_bytes {
             return Err(Error::Limit { part: "RPC request", limit: self.limits.request_bytes });
         }
+        // The token set, else the one a daemon on this machine made for itself: read now,
+        // since the daemon this command started wrote it after the command began.
+        let token = self
+            .token
+            .clone()
+            .or_else(|| std::fs::read_to_string(crate::api::app::token_file(&self.address)).ok());
         let authorization =
-            self.token.as_ref().map(|token| format!("Authorization: Bearer {token}\r\n")).unwrap_or_default();
+            token.map(|token| format!("Authorization: Bearer {token}\r\n")).unwrap_or_default();
         let head = format!(
             "POST {ENDPOINT} HTTP/1.1\r\nHost: {address}\r\nOrigin: http://{address}\r\n{SESSION_HEADER}: {}\r\n\
              {authorization}Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
@@ -195,6 +201,13 @@ impl Daemon {
         }
         match status.next() {
             Some("200") => {}
+            Some("401") => {
+                return Err(Error::Config(format!(
+                    "the daemon at {} wants a token this client does not have: set BROWSER_CMD_RPC_TOKEN to \
+                     the one it was started with (a daemon started by another user keeps its own)",
+                    self.address
+                )));
+            }
             Some(code) => {
                 return Err(Error::Protocol(format!(
                     "daemon HTTP {code}; operation outcome is not confirmed"

@@ -31,6 +31,7 @@ pub async fn run(argv: &[String]) -> Result<()> {
     match name.as_str() {
         "batch" => return batch().await,
         "restart" => return restart().await,
+        "stop" => return stop().await,
         "doctor" => return crate::api::doctor::run().await,
         "back" | "forward" => {
             let argv: Vec<String> =
@@ -125,6 +126,19 @@ async fn restart() -> Result<()> {
     }
     Daemon::connect(&std::env::current_exe()?).await?;
     println!("daemon: restarted at {address}");
+    Ok(())
+}
+
+async fn stop() -> Result<()> {
+    let address = crate::api::http::address();
+    let limits = crate::api::http::Limits::from_env()?;
+    match crate::api::client::daemon_at(&address, &limits).await? {
+        Some(build) if build.starts_with("browser-cmd/") => {
+            crate::api::client::stop(&address, &limits).await?;
+            println!("daemon: stopped at {address}, its Chrome closed");
+        }
+        _ => println!("daemon: none at {address}"),
+    }
     Ok(())
 }
 

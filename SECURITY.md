@@ -11,11 +11,14 @@ public issues. Include the version (`browser-cmd --version`), the platform and t
 
 ## The daemon
 
-- Every command is an HTTP request to a daemon, by default on `127.0.0.1:7788`. On loopback no token is
-  needed: **any process running on the same machine, as any user, can send it commands.** Do not run
-  browser-cmd on a shared machine without `BROWSER_CMD_RPC_TOKEN`.
-- `BROWSER_CMD_RPC_TOKEN` makes the daemon require `Authorization: Bearer <token>` (compared in constant
-  time). A daemon listening off loopback refuses to start without one. The connection is plain HTTP, so
+- Every command is an HTTP request to a daemon, by default on `127.0.0.1:7788`, carrying
+  `Authorization: Bearer <token>` (compared in constant time). A loopback daemon makes its own token and
+  writes it to `~/.browser-cmd/daemon-ADDRESS.token`, readable by its user only, where that user's
+  commands find it: another user of the machine cannot send it commands. **Any process running as the
+  same user can**, and so can anything that reaches Chrome's own debugging port, which Chrome opens on
+  loopback without a token.
+- `BROWSER_CMD_RPC_TOKEN` sets the token instead. A daemon listening off loopback refuses to start
+  without one. The connection is plain HTTP, so
   the token and all traffic cross the network in the clear; prefer an SSH tunnel to a loopback daemon.
 - On a loopback daemon the `Host` header must be a loopback address with the daemon's port, and any
   `Origin` header must be the same origin as `Host`. A web page, including one open in the driven Chrome,

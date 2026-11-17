@@ -29,6 +29,9 @@ pub(crate) struct Limits {
     pub(crate) sessions: usize,
     /// How long a session may sit unused before it is let go.
     pub(crate) idle: Duration,
+    /// How long the daemon may go without a request before it stops, closing
+    /// its Chrome; never, unless asked for: a person may be reading its tabs.
+    pub(crate) stop_idle: Option<Duration>,
 }
 
 impl Limits {
@@ -42,6 +45,7 @@ impl Limits {
             connections: 64,
             sessions: 256,
             idle: crate::env::seconds("IDLE_SECS")?.unwrap_or(Duration::from_secs(2 * 60 * 60)),
+            stop_idle: crate::env::seconds("STOP_IDLE_SECS")?,
         })
     }
 }

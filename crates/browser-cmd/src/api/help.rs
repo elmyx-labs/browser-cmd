@@ -43,6 +43,7 @@ Usage:
   browser-cmd doctor               what a command would run into: the build, the Chrome
                                    found and the daemon; starts nothing
   browser-cmd restart              stop the daemon and start it with the current settings
+  browser-cmd stop                 stop the daemon; its Chrome closes with it
   browser-cmd batch <<'EOF'        several commands, one per line, in one call: each
                                    but the last says one line, the first failure stops
                                    and lists the lines done and the lines not run

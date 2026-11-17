@@ -48,15 +48,31 @@ pub(crate) async fn serve(
     });
     let signalled = terminate();
     tokio::pin!(signalled);
+    let mut asked = tokio::time::Instant::now();
     loop {
+        let unused = async {
+            match state.limits.stop_idle {
+                // A command still running is not idleness, however long ago it was asked for.
+                Some(idle) => loop {
+                    tokio::time::sleep_until(asked + idle).await;
+                    if capacity.available_permits() == state.limits.connections {
+                        break;
+                    }
+                    asked = tokio::time::Instant::now();
+                },
+                None => std::future::pending().await,
+            }
+        };
         let stopped = async {
             tokio::select! {
                 _ = &mut signalled => {}
                 _ = state.stop.notified() => {}
+                _ = unused => eprintln!("browser-cmd: stopping, unused for BROWSER_CMD_STOP_IDLE_SECS"),
             }
         };
         tokio::select! {
             accepted = listener.accept() => {
+                asked = tokio::time::Instant::now();
                 let (mut stream, _) = accepted?;
                 let Ok(permit) = capacity.clone().try_acquire_owned() else {
                     let refusal = format!("HTTP/1.1 503 Service Unavailable\r\nServer: {SERVER}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
@@ -387,6 +403,25 @@ mod http_tests {
              Content-Length: {}\r\n\r\n{body}",
             body.len()
         )
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_daemon_told_to_stops_once_unused_and_otherwise_never() {
+        tokio::task::LocalSet::new()
+            .run_until(async {
+                let served = async |stop_idle| {
+                    let (state, _temp) = state();
+                    let mut limits = state.limits.clone();
+                    limits.stop_idle = stop_idle;
+                    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+                    let serving = serve(listener, state.host.clone(), limits, None);
+                    tokio::time::timeout(std::time::Duration::from_secs(3600), serving).await
+                };
+                assert!(served(None).await.is_err(), "a daemon not told to stop was still serving");
+                let stopped = served(Some(std::time::Duration::from_secs(60))).await;
+                assert!(matches!(stopped, Ok(Ok(()))), "{stopped:?}");
+            })
+            .await;
     }
 
     #[tokio::test]

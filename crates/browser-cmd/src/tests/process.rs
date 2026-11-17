@@ -106,6 +106,7 @@ async fn real_chrome_left_by_a_dead_host_is_picked_up_and_answers() {
             // The host dies without its Chrome: a kill -9, a crash, a
             // supervisor that reaped the server and not its child.
             std::mem::forget(session);
+            first.owned.borrow_mut().take();
             std::mem::forget(first);
 
             let mut again = Host::new(settings).session();

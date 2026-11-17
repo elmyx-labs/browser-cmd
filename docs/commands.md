@@ -11,6 +11,7 @@ browser-cmd <command> [args]     run one browser action against the warm daemon
 browser-cmd status               whether the daemon is up, and the local date and time zone
 browser-cmd doctor               what a command would run into: the build, the Chrome found, the daemon; starts nothing
 browser-cmd restart              stop the daemon (its Chrome closes) and start it again with the current settings
+browser-cmd stop                 stop the daemon; its Chrome closes with it
 browser-cmd batch <<'EOF'        several commands, one per line, in one call
 browser-cmd back | forward       the same as navigate back | navigate forward
 browser-cmd --serve [ADDR]       run the daemon in the foreground (default 127.0.0.1:7788)

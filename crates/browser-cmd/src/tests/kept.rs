@@ -179,8 +179,10 @@ async fn a_daemon_restarted_on_a_live_browser_takes_back_handles_the_active_tab_
                 .iter()
                 .map(|t| session.book.registry.named(t).unwrap().target.clone())
                 .collect();
-            // The daemon goes; its Chrome, on the profile, stays and is picked up by the next.
+            // The daemon goes, and the system lets go of what it held; its Chrome, on the
+            // profile, stays and is picked up by the next.
             drop(session);
+            first.owned.borrow_mut().take();
 
             let again = Host::new(settings);
             let mut session = again.named_session("cli-live");

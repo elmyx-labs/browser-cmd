@@ -14,7 +14,8 @@ fn command(workspace: &std::path::Path) -> Command {
             command.env_remove(key);
         }
     }
-    command.current_dir(workspace);
+    // A home of its own: nothing a test starts may reach the person's profile, log or token.
+    command.current_dir(workspace).env("HOME", workspace).env("USERPROFILE", workspace);
     command
 }
 
@@ -53,7 +54,7 @@ fn rpc_deadline_does_not_replay_an_unconfirmed_action() {
                 // The liveness probe, answered as a daemon of this build answers it.
                 let answer = format!(
                     "HTTP/1.1 405 Method Not Allowed\r\nServer: browser-cmd/{}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-                    env!("CARGO_PKG_VERSION")
+                    env!("BROWSER_CMD_BUILD")
                 );
                 let _ = std::io::Write::write_all(&mut stream, answer.as_bytes());
                 continue;
