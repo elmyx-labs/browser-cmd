@@ -106,20 +106,25 @@ impl Host {
 
     /// One daemon to a profile: a second would share the first one's Chrome,
     /// close it for both on its way out and send its downloads elsewhere. The
-    /// lock is the system's, so it goes with the process that held it.
-    fn own_profile(&self) -> Result<()> {
+    /// lock is the system's, so it goes with the process that held it — a
+    /// moment after that process, which is what a daemon just stopped is waited for.
+    async fn own_profile(&self) -> Result<()> {
         if self.owned.borrow().is_some() {
             return Ok(());
         }
         std::fs::create_dir_all(&self.settings.profile)?;
         let lock = std::fs::File::create(self.settings.profile.join("browser-cmd-owner"))?;
-        lock.try_lock().map_err(|_| {
-            Error::Config(format!(
-                "the profile {} is in use by another browser-cmd daemon; give this one its own \
-                 BROWSER_CMD_PROFILE, or use that daemon's BROWSER_CMD_ADDR",
-                self.settings.profile.display()
-            ))
-        })?;
+        let patience = tokio::time::Instant::now() + std::time::Duration::from_secs(2);
+        while lock.try_lock().is_err() {
+            if tokio::time::Instant::now() >= patience {
+                return Err(Error::Config(format!(
+                    "the profile {} is in use by another browser-cmd daemon; give this one its own \
+                     BROWSER_CMD_PROFILE, or use that daemon's BROWSER_CMD_ADDR",
+                    self.settings.profile.display()
+                )));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
         *self.owned.borrow_mut() = Some(lock);
         Ok(())
     }
@@ -194,7 +199,7 @@ impl Host {
             return Ok(shared);
         }
         if self.settings.attach.is_none() {
-            self.own_profile()?;
+            self.own_profile().await?;
         }
         let guard = match (&self.settings.proxy, &self.settings.attach) {
             (Some(upstream), None) => {
@@ -236,16 +241,16 @@ impl Host {
 mod tests {
     use super::*;
 
-    #[test]
-    fn a_profile_belongs_to_one_host_until_that_host_is_gone() {
+    #[tokio::test(start_paused = true)]
+    async fn a_profile_belongs_to_one_host_until_that_host_is_gone() {
         let temp = tempfile::tempdir().unwrap();
         let host = || Host::new(Settings::new(temp.path(), temp.path()));
         let (first, second) = (host(), host());
-        first.own_profile().unwrap();
-        first.own_profile().unwrap();
-        let refused = second.own_profile().unwrap_err().to_string();
+        first.own_profile().await.unwrap();
+        first.own_profile().await.unwrap();
+        let refused = second.own_profile().await.unwrap_err().to_string();
         assert!(refused.contains("in use by another browser-cmd daemon"), "{refused}");
         first.owned.borrow_mut().take();
-        second.own_profile().unwrap();
+        second.own_profile().await.unwrap();
     }
 }

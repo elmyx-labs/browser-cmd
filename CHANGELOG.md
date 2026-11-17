@@ -33,7 +33,8 @@ What surrounds the commands: telling builds apart, releasing, and finding out wh
   names never run out.
 - Releases run the checks CI runs before building, start each binary once before publishing it, attest
   where each archive was built, and refuse a tag that already has a release. CI runs the real-Chrome
-  tests on Linux, macOS and Windows, on a pinned toolchain.
+  tests on Linux and macOS on a pinned toolchain, and on Windows to say how far it is: Windows is
+  experimental until its downloads are reported and its paths printed one way.
 
 What a page sees of the browser and of the hand on it, measured against an ordinary Chrome on the same
 machine and brought to match it.

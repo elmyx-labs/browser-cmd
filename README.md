@@ -126,7 +126,8 @@ for arm64 Linux: there, install Chromium and name it in `BROWSER_CMD_EXECUTABLE`
 <details>
 <summary>Windows, or from source</summary>
 
-Windows (PowerShell), the same installer:
+Windows is experimental: the commands run, but downloads are not reported yet and paths are printed
+with both separators. In PowerShell, the same installer:
 
 ```powershell
 irm https://raw.githubusercontent.com/elmyx-labs/browser-cmd/main/install.ps1 | iex
