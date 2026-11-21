@@ -167,7 +167,19 @@ pub(crate) async fn enter(
         crate::input::keys::press(tab, &mut session.hand, "Backspace").await?;
     }
     session.hand.type_text(tab, text).await?;
-    Ok(reads(session, tab, node, text).await)
+    let now = reads(session, tab, node, text).await;
+    // Keys that went to whatever took the click — a floating label, a twin
+    // input — leave the field as it was: said so, not reported as typed.
+    if !text.trim().is_empty()
+        && now.as_deref().is_some_and(|now| now.is_empty() || held.as_str() == Some(now))
+    {
+        return Err(Error::Tool(format!(
+            "cannot type into {reference}: the keys did not reach it, it still reads {:?}. What lies \
+             over it took the click: click the field or that element first, then type without a ref",
+            now.unwrap_or_default()
+        )));
+    }
+    Ok(now)
 }
 
 /// The field's value when it differs from `text`.

@@ -355,3 +355,22 @@ async fn real_chrome_still_refuses_a_field_under_an_unrelated_panel() {
     })
     .await;
 }
+
+/// A label over its field that does not pass the click on lets the keys go
+/// elsewhere: the type fails loudly rather than reporting text it never put.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_typing_whose_keys_miss_the_field_says_so() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <div style="position:relative"><input id=to aria-label="Where to?" style="width:200px;height:30px">
+        <span style="position:absolute;left:0;top:0;width:200px;height:30px">Where to?</span></div>
+        <button>Search</button>"#
+            .to_owned(),
+    );
+    on_page(address, async |session, _| {
+        let typed = session.execute("type", json!({ "ref": "Where to?", "text": "Lisbon" })).await;
+        assert!(!typed.ok && typed.output.contains("did not reach it"), "{}", typed.output);
+    })
+    .await;
+}
