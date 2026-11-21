@@ -13,11 +13,12 @@ function (phase, words) {
     return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden';
   };
   // The words of an option as they read: inline pieces of one word run
-  // together, separately laid-out parts are separate words.
+  // together, separately laid-out parts are separate words. An SVG part has no
+  // innerText; its text content is what it reads.
   const textOf = (e) => {
     if (!e.getClientRects().length) return '';
     const mixed = [...e.childNodes].some((n) => n.nodeType === 3 && n.data.trim());
-    const text = mixed || !e.children.length ? e.innerText : [...e.children].map(textOf).filter(Boolean).join(' ');
+    const text = mixed || !e.children.length ? e.innerText ?? e.textContent : [...e.children].map(textOf).filter(Boolean).join(' ');
     return text.replace(/\s+/g, ' ').trim();
   };
   const roots = () => {
@@ -48,7 +49,7 @@ function (phase, words) {
     // Else rows that appeared since typing began: repeated siblings of short text.
     if (!groups.size) {
       for (const e of document.querySelectorAll('body *')) {
-        const text = !g.__choose.before.has(e) && !e.contains(field) && visible(e) && e.innerText.trim();
+        const text = !g.__choose.before.has(e) && !e.contains(field) && visible(e) && e.innerText?.trim();
         if (text && text.length <= OPTION_CHARS) add(e);
       }
       for (const [box, group] of groups) if (group.length < 2 || group.some((e) => e.tagName !== group[0].tagName)) groups.delete(box);

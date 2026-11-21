@@ -135,6 +135,38 @@ async fn real_chrome_chooses_from_a_list_without_roles() {
     .await;
 }
 
+/// Booking draws an SVG icon in each option, and SVG has no innerText: the
+/// option reads as its words, the icon adding its own text or nothing.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_chooses_an_option_drawn_with_an_svg_icon() {
+    let address = serve(
+        "<!doctype html><title>t</title>
+         <input id=d role=combobox aria-label=Destination aria-controls=dl>
+         <ul id=dl role=listbox></ul>
+         <script>
+         d.oninput = () => {
+           dl.innerHTML = '';
+           for (const t of ['Paris', 'Parma']) {
+             const li = document.createElement('li');
+             li.setAttribute('role', 'option');
+             li.innerHTML = `<svg width=16 height=16><path d='M0 0h16v16H0z'/><text y=12>*</text></svg><div><span>${t}</span></div>`;
+             li.onclick = () => { d.value = t; dl.innerHTML = ''; };
+             dl.append(li);
+           }
+         };
+         </script>"
+            .to_owned(),
+    );
+    on_page(address, async |session, _| {
+        let chose = session.execute("choose", json!({ "ref": "Destination", "text": "Parma" })).await;
+        assert!(chose.ok, "{}", chose.output);
+        assert!(chose.output.contains("Parma"), "{}", chose.output);
+        assert!(value(session, "d.value").await.contains("Parma"));
+    })
+    .await;
+}
+
 /// A postcode the widget does not know: nothing to pick, and the page's own
 /// words for it are quoted.
 #[tokio::test]
