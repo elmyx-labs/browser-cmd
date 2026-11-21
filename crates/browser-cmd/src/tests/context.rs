@@ -14,7 +14,7 @@ fn a_clean_retry_leaves_the_challenge_attempt_behind() {
 
 #[tokio::test]
 #[ignore = "requires installed Chrome; run with --include-ignored"]
-async fn a_clean_retry_reloads_the_page_the_session_is_on_now() {
+async fn a_clean_retry_reloads_the_page_the_session_is_on_now_and_says_site_settings_are_gone() {
     let address = serve("<!doctype html><a href='/next'>Next</a>".into());
     on_page(address, async |session, _| {
         let clicked = session.execute("click", json!({"ref":"Next"})).await;
@@ -23,6 +23,7 @@ async fn a_clean_retry_reloads_the_page_the_session_is_on_now() {
         let at = session.current().await.unwrap().url().await.unwrap();
         assert!(result.ok, "{}", result.output);
         assert!(at.ends_with("/next"), "retried stale URL: {at}");
+        assert!(result.output.contains("location, language, consent"), "{}", result.output);
     })
     .await;
 }

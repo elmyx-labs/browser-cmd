@@ -20,7 +20,9 @@ pub(crate) async fn retry_clean(session: &mut Session, args: Value) -> Result<St
     let source = session.current().await?;
     let (tab, kept) = crate::tabs::context::retry(session, &source, args.keep_signin).await?;
     let how = match kept {
-        0 => "Retried in a clean isolated browser context".to_owned(),
+        0 => "Retried in a clean isolated browser context.\nIt starts without the earlier cookies and site \
+              settings (sign-in, location, language, consent): set again anything set before"
+            .to_owned(),
         1 => "Retried in a clean isolated browser context, carrying 1 cookie for this site".to_owned(),
         many => {
             format!("Retried in a clean isolated browser context, carrying {many} cookies for this site")
