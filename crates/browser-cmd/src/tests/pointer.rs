@@ -295,3 +295,63 @@ async fn unavailable_viewport_does_not_turn_into_guessed_coordinates() {
     })
     .await;
 }
+
+/// A floating label drawn over its own field, as Google Flights draws
+/// "Where to?", is part of the field: typing goes through it.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_types_through_a_floating_label_over_its_own_field() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <div style="position:relative"><input id=to aria-label="Where to?" style="width:200px;height:30px">
+        <span onclick="to.focus()" style="position:absolute;left:0;top:0;width:200px;height:30px">Where to?</span></div>
+        <button>Search</button>"#
+            .to_owned(),
+    );
+    on_page(address, async |session, _| {
+        let typed = session.execute("type", json!({ "ref": "Where to?", "text": "Lisbon" })).await;
+        assert!(typed.ok, "{}", typed.output);
+        let read = session.execute("eval", json!({ "expression": "to.value" })).await;
+        assert!(read.output.contains("Lisbon"), "{}", read.output);
+    })
+    .await;
+}
+
+/// A radio drawn as a tile whose label text sits over the input, as Apple's
+/// configurator does: clicking the radio clicks its own label.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_clicks_a_radio_under_its_own_label_tile() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <div style="position:relative;height:60px"><input type=radio name=p id=lease style="position:absolute;margin:0;width:300px;height:60px">
+        <label for=lease style="position:absolute;left:0;top:0;width:300px;height:60px;background:#eee"><span>Lease from $38.99/mo.</span></label></div>
+        <input type=radio name=p id=buy><label for=buy>Buy</label>"#
+            .to_owned(),
+    );
+    on_page(address, async |session, _| {
+        let clicked = session.execute("click", json!({ "ref": "Lease from $38.99/mo." })).await;
+        assert!(clicked.ok, "{}", clicked.output);
+        let read = session.execute("eval", json!({ "expression": "lease.checked" })).await;
+        assert!(read.output.contains("true"), "{}", read.output);
+    })
+    .await;
+}
+
+/// A panel with a control of its own laid over a field is not the field's,
+/// even when it shares the field's wrapper: still refused as a cover.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_still_refuses_a_field_under_an_unrelated_panel() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <div style="position:relative"><input id=city aria-label=City style="width:200px;height:30px">
+        <div style="position:absolute;left:0;top:0;width:300px;height:60px;background:#fff">Sign in to see prices <button>Sign in</button></div></div>"#
+            .to_owned(),
+    );
+    on_page(address, async |session, _| {
+        let typed = session.execute("type", json!({ "ref": "City", "text": "Lisbon" })).await;
+        assert!(!typed.ok && typed.output.contains("is covered by"), "{}", typed.output);
+    })
+    .await;
+}
