@@ -58,13 +58,18 @@ pub(crate) fn passages(
         shown_to = end;
     }
     Ok(match hits {
-        0 => format!("{wanted:?} is not in the available text ({} bytes)", text.len()),
+        0 => absent(text, phrase),
         _ => format!(
             "{}{hits} match{} for {wanted:?}:\n{out}",
             if truncated { "At least " } else { "" },
             if hits == 1 { "" } else { "es" }
         ),
     })
+}
+
+/// What `passages` says when `phrase` is nowhere in `text`.
+pub(crate) fn absent(text: &str, phrase: &str) -> String {
+    format!("{:?} is not in the available text ({} bytes)", phrase.to_lowercase(), text.len())
 }
 
 pub(crate) fn context_budget(limit: usize) -> usize {

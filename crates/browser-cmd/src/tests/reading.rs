@@ -13,6 +13,25 @@ fn only_the_web_enters_the_browser_and_page_text_is_fenced() {
     assert_eq!(sentence("a Cloudflare challenge"), "A Cloudflare challenge");
 }
 
+/// A phrase the page does not hold names the controls nearest to it, as a
+/// click that misses does, so the next look has a lead.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_text_that_finds_nothing_names_the_nearest_controls() {
+    let address =
+        serve("<!doctype html><title>t</title><p>Opening hours</p><button>Show amenities</button>".into());
+    on_page(address, async |session, _| {
+        let missed = session.execute("text", json!({ "find": "Wheelchair amenities" })).await;
+        assert!(missed.ok, "{}", missed.output);
+        assert!(missed.output.contains("is not in the available text"), "{}", missed.output);
+        assert!(missed.output.contains("nearest named controls are @e"), "{}", missed.output);
+        assert!(missed.output.contains("button \"Show amenities\""), "{}", missed.output);
+        let found = session.execute("text", json!({ "find": "Opening" })).await;
+        assert!(!found.output.contains("nearest"), "{}", found.output);
+    })
+    .await;
+}
+
 #[test]
 fn a_phrase_is_found_with_its_place_and_the_text_reads_on() {
     let text = "Alpha was born in 1901.\nBeta wrote about alpha in 1950. Gamma.";

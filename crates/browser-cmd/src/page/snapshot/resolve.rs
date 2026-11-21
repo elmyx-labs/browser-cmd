@@ -75,20 +75,7 @@ impl Refs {
         let many = if exact.is_empty() { partial } else { exact };
         match many.as_slice() {
             [] => {
-                // Offer the nearest actionable elements — those whose name shares
-                // a word with the ask — so a near-miss self-corrects without a
-                // blind re-snapshot.
-                let words: Vec<&str> = wanted.split_whitespace().collect();
-                let near: Vec<String> = self
-                    .evidence
-                    .iter()
-                    .filter(|reference| {
-                        let lower = reference.name.to_lowercase();
-                        words.iter().any(|word| word.len() > NEAR_WORD_CHARS && lower.contains(word))
-                    })
-                    .take(NEAREST_SHOWN)
-                    .map(|reference| format!("@{} {} {:?}", reference.handle, reference.role, reference.name))
-                    .collect();
+                let near = self.nearest(target);
                 if near.is_empty() {
                     Err(format!(
                         "nothing in the latest page state is named {target:?}; act by an @ref it has"
@@ -110,6 +97,23 @@ impl Refs {
                     .join(", ")
             )),
         }
+    }
+
+    /// The actionable elements whose name shares a word with the ask, so a
+    /// near miss self-corrects without a blind re-snapshot.
+    pub(crate) fn nearest(&self, target: &str) -> Vec<String> {
+        let wanted = target.to_lowercase();
+        let words: Vec<&str> =
+            wanted.split_whitespace().filter(|word| word.len() > NEAR_WORD_CHARS).collect();
+        self.evidence
+            .iter()
+            .filter(|reference| {
+                let lower = reference.name.to_lowercase();
+                words.iter().any(|word| lower.contains(word))
+            })
+            .take(NEAREST_SHOWN)
+            .map(|reference| format!("@{} {} {:?}", reference.handle, reference.role, reference.name))
+            .collect()
     }
 
     /// The ref the latest render gave the one element of the role and name a

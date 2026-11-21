@@ -144,7 +144,14 @@ pub(crate) async fn text(session: &mut Session, args: Value) -> Result<String> {
     let limits = &session.settings().limits;
     let limit = args.max_bytes.unwrap_or(limits.text).min(limits.page_text);
     let body = match find {
-        Some(phrase) => passages(text, phrase, limits.passage, limit, args.context)?,
+        Some(phrase) => {
+            let found = passages(text, phrase, limits.passage, limit, args.context)?;
+            let near = session.document.refs.nearest(phrase);
+            match found == crate::text::passages::absent(text, phrase) && !near.is_empty() {
+                true => format!("{found}; the nearest named controls are {}.", near.join(", ")),
+                false => found,
+            }
+        }
         None => {
             let from = crate::text::ceil(text, args.from);
             let context = if args.context {
