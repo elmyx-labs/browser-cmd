@@ -11,7 +11,26 @@ pub(crate) async fn eval(session: &mut Session, args: Value) -> Result<String> {
     let args = args!(args, Args { expression: String });
     let tab = session.current().await?;
     let value = session.document.caller_world.evaluate(&tab, &args.expression).await?;
-    Ok(bounded(crate::text::json(&value), session.settings().limits.page_text))
+    Ok(whole_or_saved(crate::text::json(&value), session.settings()))
+}
+
+/// A long value is kept whole in a file and its head shown, as a long tree is:
+/// a bound that says only "truncated" leaves the rest out of reach.
+fn whole_or_saved(value: String, settings: &crate::Settings) -> String {
+    let limit = settings.limits.page_text;
+    if value.len() <= limit {
+        return untrusted(&value);
+    }
+    let Ok((path, _)) = crate::workspace::spill(settings, "eval", "txt", 1, value.as_bytes()) else {
+        return bounded(value, limit);
+    };
+    let head = crate::text::head(&value, limit);
+    untrusted(&format!(
+        "{head}\n[{} of {} bytes shown; the whole value is in {}]",
+        head.len(),
+        value.len(),
+        path.display()
+    ))
 }
 
 /// A rolling window of the browser log, newest last.
@@ -75,4 +94,24 @@ pub(crate) async fn cdp(session: &mut Session, args: Value) -> Result<String> {
     let value = tab.call(&args.method, params).await?;
     let text = serde_json::to_string_pretty(&value)?;
     Ok(bounded(text, session.settings().limits.page_text))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_long_value_is_saved_whole_and_a_short_one_is_shown_as_it_is() {
+        let temp = tempfile::tempdir().unwrap();
+        let settings = crate::Settings::new(temp.path(), temp.path());
+        let short = whole_or_saved("[1,2]".into(), &settings);
+        assert!(short.contains("[1,2]") && !short.contains("bytes shown"), "{short}");
+
+        let long = format!("\"{}\"", "x".repeat(settings.limits.page_text + 10));
+        let told = whole_or_saved(long.clone(), &settings);
+        let path = told.split("the whole value is in ").nth(1).unwrap().split(']').next().unwrap();
+        assert_eq!(std::fs::read_to_string(path).unwrap(), long);
+        assert!(told.contains(&format!("of {} bytes shown", long.len())), "{told}");
+        assert!(!told.contains("output truncated"), "{told}");
+    }
 }
