@@ -129,10 +129,10 @@ pub const CATALOGUE: &[Command] = &[
     },
     Command {
         name: "drag",
-        usage: "from='{…}' to='{…}'",
+        usage: "FROM TO | from=FROM to=TO   (each @ref | \"name\" | X,Y)",
         about: "Press on one element or point, travel to another with the button held, and let go: a \
-                slider set, a card moved between columns, a map panned.",
-        parse: pairs,
+                slider set, a card moved between columns, a map panned, a shape drawn on a canvas.",
+        parse: drag,
         changing: true,
         run: run!(crate::tools::pointer::drag),
     },
@@ -545,15 +545,45 @@ fn aim(name: &'static str, rest: &[String], click: bool) -> Result<Value> {
     if word.trim().is_empty() {
         return Err(needs(name, "a ref, a name, or coordinates"));
     }
-    let point = word
-        .split_once(',')
-        .and_then(|(x, y)| Some((x.trim().parse::<f64>().ok()?, y.trim().parse::<f64>().ok()?)));
-    let mut target = point.map_or_else(|| json!({ "ref": word }), |(x, y)| json!({ "x": x, "y": y }));
+    let mut target = spot(&word);
     for option in options {
         let (key, raw) = option.split_once('=').expect("the click option suffix was checked above");
         target[key] = serde_json::from_str(raw).unwrap_or_else(|_| Value::String(raw.to_owned()));
     }
     Ok(target)
+}
+
+/// A target word: `X,Y` is a viewport point, anything else a ref or a name.
+fn spot(word: &str) -> Value {
+    let point = word
+        .split_once(',')
+        .and_then(|(x, y)| Some((x.trim().parse::<f64>().ok()?, y.trim().parse::<f64>().ok()?)));
+    point.map_or_else(|| json!({ "ref": word }), |(x, y)| json!({ "x": x, "y": y }))
+}
+
+/// Two targets, as words in order or as `from=`/`to=`, each written as `click` takes one or as a JSON object.
+fn drag(rest: &[String]) -> Result<Value> {
+    let mut args = json!({});
+    let mut loose = Vec::new();
+    for word in rest {
+        match word.split_once('=') {
+            Some((key @ ("from" | "to"), value)) => {
+                args[key] =
+                    serde_json::from_str(value).ok().filter(Value::is_object).unwrap_or_else(|| spot(value));
+            }
+            _ => loose.push(word.as_str()),
+        }
+    }
+    let mut loose = loose.into_iter();
+    for key in ["from", "to"] {
+        if args.get(key).is_none() {
+            args[key] = spot(loose.next().ok_or_else(|| needs("drag", "a start and an end"))?);
+        }
+    }
+    match loose.next() {
+        Some(extra) => Err(Error::Config(format!("drag takes two targets; {extra:?} is a third"))),
+        None => Ok(args),
+    }
 }
 
 /// A leading word without `=` is what to find; the rest are pairs.
@@ -740,6 +770,28 @@ mod tests {
 
         let hover = arguments("hover", &["Menu".into(), "right=true".into()]).unwrap();
         assert_eq!(hover, json!({"ref":"Menu right=true"}));
+    }
+
+    #[test]
+    fn drag_takes_its_ends_as_click_takes_a_target() {
+        let words = |list: &[&str]| list.iter().map(|word| (*word).to_owned()).collect::<Vec<_>>();
+        let points = json!({"from":{"x":620.0, "y":110.0}, "to":{"x":820.0, "y":160.0}});
+        assert_eq!(arguments("drag", &words(&["from=620,110", "to=820,160"])).unwrap(), points);
+        assert_eq!(arguments("drag", &words(&["620,110", "820,160"])).unwrap(), points);
+        assert_eq!(
+            arguments("drag", &words(&[r#"from={"x":620,"y":110}"#, "to=820,160"])).unwrap(),
+            json!({"from":{"x":620, "y":110}, "to":{"x":820.0, "y":160.0}})
+        );
+        assert_eq!(
+            arguments("drag", &words(&["@e1.2", "Done column"])).unwrap(),
+            json!({"from":{"ref":"@e1.2"}, "to":{"ref":"Done column"}})
+        );
+        assert_eq!(
+            arguments("drag", &words(&["to=Done", "@e1.2"])).unwrap(),
+            json!({"from":{"ref":"@e1.2"}, "to":{"ref":"Done"}})
+        );
+        assert!(arguments("drag", &words(&["620,110"])).is_err());
+        assert!(arguments("drag", &words(&["1,1", "2,2", "3,3"])).is_err());
     }
 
     #[test]

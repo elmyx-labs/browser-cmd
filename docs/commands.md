@@ -101,10 +101,10 @@ Move the pointer onto an element or point without clicking, for menus that open 
 ### drag
 
 ```
-browser-cmd drag from='{…}' to='{…}'
+browser-cmd drag FROM TO | from=FROM to=TO   (each @ref | "name" | X,Y)
 ```
 
-Press on one element or point, travel to another with the button held, and let go: a slider set, a card moved between columns, a map panned.
+Press on one element or point, travel to another with the button held, and let go: a slider set, a card moved between columns, a map panned, a shape drawn on a canvas.
 
 ### type
 
