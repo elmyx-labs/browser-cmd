@@ -26,6 +26,7 @@ use tokio::{
     task::JoinHandle,
 };
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig;
 
 use crate::chrome::events::Events;
 use crate::settings::Dialogs;
@@ -76,7 +77,11 @@ impl Cdp {
     /// Connect, and answer every dialog a page opens from then on as `dialogs`
     /// says, at once, because a dialog left standing stops its tab.
     pub(crate) async fn connect(url: &str, timeout: Duration, dialogs: Dialogs) -> Result<Self> {
-        let (socket, _) = tokio::time::timeout(timeout, tokio_tungstenite::connect_async(url))
+        // The browser answers in one message however large the page is: a size
+        // limit here would close the connection on the pages that most need reading.
+        let unlimited = WebSocketConfig::default().max_message_size(None).max_frame_size(None);
+        let connecting = tokio_tungstenite::connect_async_with_config(url, Some(unlimited), false);
+        let (socket, _) = tokio::time::timeout(timeout, connecting)
             .await
             .map_err(|_| Error::Tool(format!("connecting to {url} timed out")))?
             .map_err(|error| Error::Tool(format!("cannot connect to {url}: {error}")))?;
@@ -519,5 +524,29 @@ mod tests {
         assert!(call.await.unwrap_err().is_cancelled());
         assert!(waiting.lock().unwrap().is_empty());
         assert!(queue.try_recv().is_err());
+    }
+
+    /// A page of thousands of rows answers with tens of megabytes in one message.
+    #[tokio::test]
+    async fn an_answer_of_any_size_arrives_whole() {
+        use futures_util::{SinkExt, StreamExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let size = 70 << 20;
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut socket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            let request = socket.next().await.unwrap().unwrap().into_text().unwrap();
+            let request: Value = serde_json::from_str(&request).unwrap();
+            let answer = json!({"id": request["id"], "result": {"tree": "x".repeat(size)}});
+            socket.send(Message::Text(answer.to_string().into())).await.unwrap();
+            let _ = socket.next().await;
+        });
+        let cdp =
+            Cdp::connect(&format!("ws://{address}"), Duration::from_secs(20), Dialogs::Accept).await.unwrap();
+        let answer = cdp.call(None, "Accessibility.getFullAXTree", json!({})).await.unwrap();
+        assert_eq!(answer["tree"].as_str().unwrap().len(), size);
+        drop(cdp);
+        server.abort();
     }
 }
