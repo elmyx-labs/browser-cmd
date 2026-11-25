@@ -374,6 +374,24 @@ async fn real_chrome_refuses_a_field_under_a_button_of_its_wrapper() {
     .await;
 }
 
+/// A cover with no words on it is told by its place and size, so it can be
+/// looked at or clicked: its tag alone names nothing to act on.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_tells_a_wordless_cover_by_where_it_is() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title><style>body{margin:0}</style>
+        <button>Buy</button><div style="position:fixed;left:0;top:0;width:400px;height:200px"></div>"#
+            .to_owned(),
+    );
+    on_page(address, async |session, _| {
+        let clicked = session.execute("click", json!({ "ref": "Buy" })).await;
+        let told = "is covered by a div with no words on it, 400x200 with its middle at 200,100;";
+        assert!(!clicked.ok && clicked.output.contains(told), "{}", clicked.output);
+    })
+    .await;
+}
+
 /// A label over its field that does not pass the click on lets the keys go
 /// elsewhere: the type fails loudly rather than reporting text it never put.
 #[tokio::test]

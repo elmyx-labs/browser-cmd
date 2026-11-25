@@ -102,8 +102,8 @@ pub(crate) async fn covered_by(
     let Some(node) = hit.node else { return Ok(None) };
     let text = hit.detail.unwrap_or_default();
     Ok(Some(match session.document.refs.handle_for(node) {
-        Some(handle) => format!("@{handle} {text:?}"),
-        None => format!("{text:?}"),
+        Some(handle) => format!("@{handle} {text}"),
+        None => text,
     }))
 }
 

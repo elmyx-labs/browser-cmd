@@ -28,5 +28,12 @@ function(x, y) {
     const TWIN = 'textarea,[contenteditable],input:not([type=button],[type=submit],[type=reset],[type=image],[type=checkbox],[type=radio],[type=file])';
     const other = (e) => (e !== hit || !hit.matches(TWIN)) && !e.contains(this) && !this.contains(e);
     if (shared && shared !== document.body && ![...shared.querySelectorAll(CONTROLS)].some(other)) return null;
-    return { node: hit, detail: (hit.getAttribute('aria-label') || hit.innerText || hit.tagName).trim().slice(0, COVER_CHARS) };
+    const words = (hit.getAttribute('aria-label') || hit.innerText || '').trim().slice(0, COVER_CHARS);
+    if (words) return { node: hit, detail: JSON.stringify(words) };
+    // Nothing to call it by: where it is, so it can be looked at or clicked.
+    const box = hit.getBoundingClientRect();
+    const middle = (low, size, limit) => Math.round((Math.max(low, 0) + Math.min(low + size, limit)) / 2);
+    const size = `${Math.round(box.width)}x${Math.round(box.height)}`;
+    const centre = `${middle(box.left, box.width, innerWidth)},${middle(box.top, box.height, innerHeight)}`;
+    return { node: hit, detail: `a ${hit.tagName.toLowerCase()} with no words on it, ${size} with its middle at ${centre}` };
 }
