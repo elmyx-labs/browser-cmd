@@ -23,7 +23,10 @@ function(x, y) {
     if ([...(this.labels || [])].some((label) => label.contains(hit))) return null;
     let shared = hit.parentElement;
     while (shared && !shared.contains(this)) shared = shared.parentElement;
-    const other = (e) => e !== hit && !e.contains(this) && !this.contains(e);
+    // What is hit counts as the target's own only when it takes the text itself,
+    // as a twin input does: a button over the field is a control of its own.
+    const TWIN = 'textarea,[contenteditable],input:not([type=button],[type=submit],[type=reset],[type=image],[type=checkbox],[type=radio],[type=file])';
+    const other = (e) => (e !== hit || !hit.matches(TWIN)) && !e.contains(this) && !this.contains(e);
     if (shared && shared !== document.body && ![...shared.querySelectorAll(CONTROLS)].some(other)) return null;
     return { node: hit, detail: (hit.getAttribute('aria-label') || hit.innerText || hit.tagName).trim().slice(0, COVER_CHARS) };
 }

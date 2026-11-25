@@ -356,6 +356,24 @@ async fn real_chrome_still_refuses_a_field_under_an_unrelated_panel() {
     .await;
 }
 
+/// The cover's own control is a cover too, wherever in the panel the pointer
+/// would land: a button laid over the whole field is not the field's label.
+#[tokio::test]
+#[ignore = "requires installed Chrome; run with --include-ignored"]
+async fn real_chrome_refuses_a_field_under_a_button_of_its_wrapper() {
+    let address = serve(
+        r#"<!doctype html><meta charset=utf-8><title>t</title>
+        <div style="position:relative"><input id=city aria-label=City style="width:200px;height:30px">
+        <button style="position:absolute;left:0;top:0;width:300px;height:60px">Sign in</button></div>"#
+            .to_owned(),
+    );
+    on_page(address, async |session, _| {
+        let typed = session.execute("type", json!({ "ref": "City", "text": "Lisbon" })).await;
+        assert!(!typed.ok && typed.output.contains("is covered by"), "{}", typed.output);
+    })
+    .await;
+}
+
 /// A label over its field that does not pass the click on lets the keys go
 /// elsewhere: the type fails loudly rather than reporting text it never put.
 #[tokio::test]
