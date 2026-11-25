@@ -133,5 +133,6 @@ mod sites;
 mod stealth;
 mod submission;
 mod tabs;
+mod upload;
 mod walls;
 mod workflows;

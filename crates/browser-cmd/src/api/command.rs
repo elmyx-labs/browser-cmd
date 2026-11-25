@@ -447,7 +447,7 @@ pub const CATALOGUE: &[Command] = &[
     Command {
         name: "upload",
         usage: "ref=@ref path=PATH",
-        about: "Attach a file from the workspace to a file input, by ref.",
+        about: "Attach a file from the workspace to a file input, by the ref of the input or of the button that opens its file chooser.",
         parse: pairs,
         changing: true,
         run: run!(crate::tools::files::upload),

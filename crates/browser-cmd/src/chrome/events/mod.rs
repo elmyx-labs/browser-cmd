@@ -11,7 +11,7 @@ mod logs;
 mod notes;
 pub(crate) mod targets;
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -38,8 +38,9 @@ pub(crate) struct Events {
     /// The user agent override every target is started with, when the browser's
     /// own names it headless.
     pub(crate) disguise: Option<Value>,
-    /// Sessions whose page asked for a file since they were last asked about it.
-    choosers: HashSet<String>,
+    /// Sessions whose page asked for a file since they were last asked about
+    /// it, with the input that asked when the browser named one.
+    choosers: HashMap<String, Option<i64>>,
     /// The tab told it has the focus, and the session that told it.
     pub(crate) focused: Option<(String, String)>,
     /// The tempo a dialog is read at before it is answered: a person's at 1, none at 0.
@@ -94,8 +95,9 @@ impl Events {
         self.traffic.detach(session);
     }
 
-    /// Whether this tab's page asked for a file since it was last asked about it.
-    pub(crate) fn chooser_opened(&mut self, session: &str) -> bool {
+    /// Whether this tab's page asked for a file since it was last asked about
+    /// it, and the input that asked.
+    pub(crate) fn chooser_opened(&mut self, session: &str) -> Option<Option<i64>> {
         self.choosers.remove(session)
     }
 
@@ -166,7 +168,9 @@ impl Events {
                     )
                 }];
             }
-            "Page.fileChooserOpened" => drop(self.choosers.insert(session.to_owned())),
+            "Page.fileChooserOpened" => {
+                self.choosers.insert(session.to_owned(), params["backendNodeId"].as_i64());
+            }
             "Target.attachedToTarget" if self.disguise.is_some() => return self.disguised(params),
             // A window a page opens takes the focus from it, as the browser
             // does it: at once, not when the session comes to follow it there.

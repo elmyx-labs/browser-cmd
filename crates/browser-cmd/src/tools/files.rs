@@ -16,41 +16,53 @@ pub(crate) async fn upload(session: &mut Session, args: Value) -> Result<String>
     let node = session.node(&args.r#ref)?;
     let path = inside(&session.settings().workspace, &args.path)?;
     let tab = session.current().await?;
-    choose(session, &tab, node).await?;
-    crate::page::dom::set_files(&tab, node, &path).await?;
+    let input =
+        session.document.world.call_on(&tab, node, FILE_INPUT, Vec::new()).await? == Value::Bool(true);
+    let asked = choose(session, &tab, node, input).await?;
+    // The ref is the input itself, or the button a page puts in front of an
+    // input it hides or makes on the spot: then the browser names the input.
+    let Some(input) = input.then_some(node).or(asked) else {
+        return Err(Error::Tool(format!(
+            "cannot upload through {}: it is not a file input, and clicking it asked for no file. Name the \
+             control that opens the file chooser",
+            args.r#ref
+        )));
+    };
+    crate::page::dom::set_files(&tab, input, &path).await?;
     after(session, &tab, "Attached the file").await
 }
 
-/// How long a click on a file input gets to ask for its file.
+/// How long a click gets to ask for its file.
 const CHOOSER: Duration = Duration::from_secs(2);
 
-/// Click the input and take a person's moment over the chooser, where the
-/// input is one a person could click: a file that appears in an input nobody
-/// clicked is one no person put there. The chooser itself is kept from
-/// opening. An input the page hides behind a button of its own is left to be
-/// handed its file directly.
-async fn choose(session: &mut Session, tab: &Tab, node: i64) -> Result<()> {
-    if session.document.world.call_on(tab, node, FILE_INPUT, Vec::new()).await? != Value::Bool(true) {
-        return Ok(());
-    }
-    let Ok((x, y)) = aim(session, tab, node).await else { return Ok(()) };
+/// Click the control and take a person's moment over the chooser, where it is
+/// one a person could click: a file that appears in an input nobody clicked is
+/// one no person put there. The chooser itself is kept from opening. A file
+/// input a person could not click is left to be handed its file directly.
+/// Returns the input the browser says asked for the file.
+async fn choose(session: &mut Session, tab: &Tab, node: i64, input: bool) -> Result<Option<i64>> {
+    let (x, y) = match aim(session, tab, node).await {
+        Ok(point) => point,
+        Err(_) if input => return Ok(None),
+        Err(error) => return Err(error),
+    };
     crate::page::dom::intercept_chooser(tab, true).await?;
     let clicked = session.hand.click(tab, x, y).await;
-    let asked = tokio::time::Instant::now() + CHOOSER;
-    let mut opened = false;
-    while clicked.is_ok() && !opened && tokio::time::Instant::now() < asked {
+    let until = tokio::time::Instant::now() + CHOOSER;
+    let mut opened = None;
+    while clicked.is_ok() && opened.is_none() && tokio::time::Instant::now() < until {
         opened = tab.cdp.events().chooser_opened(&tab.session);
-        if !opened {
+        if opened.is_none() {
             tokio::time::sleep(Duration::from_millis(20)).await;
         }
     }
     let released = crate::page::dom::intercept_chooser(tab, false).await;
     clicked?;
     released?;
-    if opened {
+    if opened.is_some() {
         session.hand.think().await;
     }
-    Ok(())
+    Ok(opened.flatten())
 }
 
 /// `join` on an absolute path throws the workspace away and `..` walks out of

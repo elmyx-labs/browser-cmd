@@ -232,7 +232,7 @@ This session's tabs, each by a handle t1, t2, … it keeps for the session: list
 browser-cmd upload ref=@ref path=PATH
 ```
 
-Attach a file from the workspace to a file input, by ref.
+Attach a file from the workspace to a file input, by the ref of the input or of the button that opens its file chooser.
 
 ### eval
 
