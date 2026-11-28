@@ -52,6 +52,17 @@ pub(crate) fn refused(document: &Value) -> Option<String> {
     })
 }
 
+/// How a browser with a window is had.
+pub(crate) const WINDOW: &str =
+    "set BROWSER_CMD_HEADLESS=0 (headless = false in config.toml), `restart`, and open the page again";
+
+/// What a page that turned the browser away could tell about it.
+pub(crate) fn headless() -> String {
+    format!(
+        "This browser is headless, which a site can tell and some refuse. For one with a window, {WINDOW}."
+    )
+}
+
 /// What is over the page and the ways out it offers, each with the ref
 /// `handle` finds for its name.
 pub(crate) fn overlay<'a>(over: &Overlay, handle: impl Fn(&str) -> Option<&'a str>) -> String {

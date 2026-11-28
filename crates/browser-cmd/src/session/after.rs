@@ -59,7 +59,7 @@ pub(crate) async fn after(session: &mut Session, tab: &Tab, action: &str) -> Res
     let empty = state.empty;
     // After the state, so each way out is named by the ref that state gave it.
     notes.extend(over.map(|over| notes::overlay(&over, |name| session.document.refs.only_named(name))));
-    let (status, refused) = landed.verdict(&state.address, &state.document);
+    let (status, refused) = landed.verdict(&state.address, &state.document, session.host.settings());
     notes.extend(session.book.registry.seen(&tab.target, &state.address, &state.title, status));
     notes.extend(refused);
     notes.extend(saved_pdf(session, tab, &state.document).await);

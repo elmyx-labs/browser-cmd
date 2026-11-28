@@ -55,11 +55,10 @@ pub(crate) async fn tab(session: &mut Session, args: Value) -> Result<String> {
         }
         "show" => {
             if session.host.settings().headless {
-                return Err(Error::Tool(
-                    "a headless browser has no window to put in front of a person: set BROWSER_CMD_HEADLESS=0 \
-                     (headless = false in config.toml), `restart`, and open the page again"
-                        .into(),
-                ));
+                return Err(Error::Tool(format!(
+                    "a headless browser has no window to put in front of a person: {}",
+                    crate::session::notes::WINDOW
+                )));
             }
             let target = session.book.chosen(&tabs, args.id.as_deref())?;
             let tab = crate::tabs::select(session, &target).await?;

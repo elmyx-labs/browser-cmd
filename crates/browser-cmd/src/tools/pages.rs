@@ -153,7 +153,7 @@ async fn read(
     let document = world.call(tab, crate::page::js::DOCUMENT, Vec::new()).await.unwrap_or(Value::Null);
     let text = crate::page::reading::read(&mut world, tab, false, None, true, skip).await?.render();
     let crate::chrome::tab::TargetInfo { title, url: address, .. } = tab.info().await?;
-    let (status, refused) = landed.verdict(&address, &document);
+    let (status, refused) = landed.verdict(&address, &document, settings);
     let notes: String = landed.said.iter().chain(&refused).map(|note| format!("{note}\n")).collect();
     let body = match find {
         Some(find) => crate::text::passages::passages(&text, find, settings.limits.passage, limit, true)?,
