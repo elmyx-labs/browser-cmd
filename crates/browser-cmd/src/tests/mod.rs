@@ -98,11 +98,11 @@ async fn on_page_with<T>(
         .await
 }
 
-/// Whether a test may open a real window: a display exists, and the operator
-/// has not asked for headless. A test that covers both modes covers only the
-/// allowed one rather than opening a window nobody asked for.
+/// Whether a test may open a real window: only when the operator asked for
+/// one. A test that covers both modes covers only the allowed one rather
+/// than opening a window nobody asked for.
 fn headed_allowed() -> bool {
-    crate::env::display_available() && crate::env::flag("HEADLESS").ok().flatten() != Some(true)
+    crate::env::flag("HEADLESS").ok().flatten() == Some(false)
 }
 
 mod arguments;

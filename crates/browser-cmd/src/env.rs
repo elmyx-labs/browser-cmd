@@ -107,15 +107,6 @@ fn parse_config(text: &str) -> std::result::Result<Vec<(String, String)>, String
     Ok(values)
 }
 
-/// Whether a window can be shown. A real window is the strongest single
-/// signal of a real user, and on a desktop it costs nothing.
-pub(crate) fn display_available() -> bool {
-    if cfg!(target_os = "macos") || cfg!(target_os = "windows") {
-        return true;
-    }
-    std::env::var_os("DISPLAY").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

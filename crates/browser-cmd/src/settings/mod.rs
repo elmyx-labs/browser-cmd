@@ -10,7 +10,7 @@ pub(crate) mod upstream;
 
 pub use presence::Placement;
 
-use crate::env::{display_available, flag, parse, var};
+use crate::env::{flag, parse, var};
 use crate::{Error, Result};
 use upstream::UpstreamProxy;
 
@@ -209,7 +209,7 @@ impl Settings {
             sites: Vec::new(),
             follow: false,
             executable: None,
-            headless: !display_available(),
+            headless: true,
             no_sandbox: false,
             chrome_args: Vec::new(),
             proxy: None,

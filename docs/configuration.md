@@ -16,7 +16,7 @@ variable overrides both.
 chrome = "mine"                  # work in the Chrome I am signed in to (see your-chrome.md)
 sites = "mail.google.com, github.com"
 follow = true                    # bring the tab the agent turns to forward, to watch it work
-headless = false
+headless = false                 # a browser with a window; headless without this line
 ```
 
 The files are flat `key = value` lines with `#` comments, strings quoted; tables and arrays are not
@@ -41,7 +41,7 @@ closes gracefully, and a new daemon starts with the current settings.
 | `BROWSER_CMD_FOLLOW` | no | Yes/no: in a headed browser, `tab switch`, `tab use` and the screenshots of `tab check` bring the tab's window, and the browser with it, to the front, to watch the agent work; it takes your focus each time. Off, nothing is brought forward: every tab of the agent has a window of its own behind your windows, shown and running there, and the one the agent works in is the one page told it has the focus, as the page in front of a person is. Headless there is nothing to show, and tabs are brought to the front freely. |
 | `BROWSER_CMD_CDP` | unset | Attach to a running Chrome instead of launching one: its `http://HOST:PORT` DevTools endpoint (preferred: it survives a Chrome restart) or a `ws://` debugger URL. Nothing is launched, overridden or closed, and the launch settings below have no effect. Setup: [your-chrome.md](your-chrome.md). |
 | `BROWSER_CMD_EXECUTABLE` | discovered | The Chrome binary to launch. Without it, browser-cmd looks for stable Google Chrome in the standard install locations, then on `PATH`, then (macOS) via Spotlight; Chromium, Beta, Dev, Canary and Chrome for Testing are not picked. |
-| `BROWSER_CMD_HEADLESS` | headless only without a display | Yes/no. macOS and Windows always have a display; Linux has one when `DISPLAY` or `WAYLAND_DISPLAY` is set. A page can tell a headless browser from one with a window: it refuses a permission request at once, `print()` and fullscreen do nothing a window does, and a sandboxed frame or a shared or service worker can name it headless. For a site that checks, run headed (under a virtual display on a server). |
+| `BROWSER_CMD_HEADLESS` | yes | Yes/no. Headless, no window opens on your desktop. Set it to no and `restart` for a browser with a window: to watch the agent, for `tab show`, or for a site that checks. A page can tell a headless browser from one with a window: it refuses a permission request at once, `print()` and fullscreen do nothing a window does, and a sandboxed frame or a shared or service worker can name it headless. A headed browser needs a display (a virtual one on a server). |
 | `BROWSER_CMD_NO_SANDBOX` | no | Yes/no: pass `--no-sandbox`, for containers that cannot run Chrome's sandbox. |
 | `BROWSER_CMD_ARGS` | none | Extra Chrome flags, split on whitespace, added after browser-cmd's own. |
 | `BROWSER_CMD_WINDOW` | `1440,900` | `WIDTH,HEIGHT` of the headless window in CSS pixels. The screen around it is a laptop's on macOS (1512×982 at 2x) and a desktop's elsewhere (1920×1080); a headed browser has the real one. |
