@@ -27,11 +27,12 @@ async fn daemon(address: &str) -> Result<String> {
         Some(build) if build.starts_with("browser-cmd/") => {
             format!("up at {address} as {build}; the next command replaces it with this build")
         }
-        Some(_) => {
+        Some(_) if crate::env::var("ADDR").is_some() => {
             return Err(Error::Tool(format!(
                 "{address} is taken by something that is not browser-cmd; set BROWSER_CMD_ADDR"
             )));
         }
+        Some(_) => format!("down ({address} is another program's; a command starts one on a free port)"),
         None => format!("down (nothing at {address}; a command starts one)"),
     })
 }
@@ -52,7 +53,7 @@ pub(crate) async fn run() -> Result<()> {
             Err(error) => println!("{:<8} PROBLEM: {error}", format!("{name}:")),
         }
     }
-    println!("log:     {}", app::log(&address).display());
+    println!("log:     {}", app::log().display());
     match checks.iter().filter(|(_, found)| found.is_err()).count() {
         0 => Ok(()),
         problems => Err(Error::Tool(format!("doctor found {problems} problem(s), named above"))),

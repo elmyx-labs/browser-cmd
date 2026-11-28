@@ -60,7 +60,7 @@ closes gracefully, and a new daemon starts with the current settings.
 
 | Variable | Default | Effect |
 | --- | --- | --- |
-| `BROWSER_CMD_ADDR` | `127.0.0.1:7788`, `127.0.0.1:7789` under `BROWSER_CMD_CHROME=mine` | `HOST:PORT` of the daemon, for both the client and `--serve` without an address. A client only starts a daemon itself on a loopback address. |
+| `BROWSER_CMD_ADDR` | the default daemon's | `HOST:PORT` of the daemon, for both the client and `--serve` without an address. A client only starts a daemon itself on a loopback address. Unset, there is one default daemon for each user (and one beside it under `BROWSER_CMD_CHROME=mine`): it listens on `127.0.0.1:7788` (`127.0.0.1:7789`) when that port is free and on any free one when another program has it, and writes where to `~/.browser-cmd/daemon.addr` (`daemon-mine.addr`), where every command finds it. |
 | `BROWSER_CMD_SESSION` | one per workspace | Session name. By default every command in the same workspace shares one session (its tabs and refs); a name gives two callers in one workspace separate sessions. |
 | `BROWSER_CMD_WORKSPACE` | git work tree, else the working directory | The workspace root: what the default session is named after, and, for the daemon, where its files go (see below). |
 | `BROWSER_CMD_RPC_TOKEN` | one the daemon makes | Bearer token the client sends and the daemon requires. A loopback daemon without one makes its own and keeps it in `~/.browser-cmd/daemon-ADDRESS.token`, readable by its user only. Required for a daemon listening off loopback. Visible ASCII only. |
@@ -96,7 +96,8 @@ watches for keystrokes sees the difference.
 | `<workspace>/media/browser/downloads/` | Files the page downloads. |
 | `./.browser-cmd/used` | An empty marker that browser-cmd ran a command in this directory. |
 | `./.browser-cmd/traces/` | A trace per failed command (the command without what `type` typed, the error and the browser log), in the directory the command ran in; the last 50 are kept. |
-| `~/.browser-cmd/daemon-ADDRESS.log` | What the daemon at that address said outside any command: its start, and the error or panic it ended on. Started over once it passes 1 MB. |
+| `~/.browser-cmd/daemon.log`, `daemon-ADDRESS.log` | What the default daemon, or the one at that address, said outside any command: its start, and the error or panic it ended on. Started over once it passes 1 MB. |
+| `~/.browser-cmd/daemon.addr`, `daemon.lock` | Where the default daemon listens, and the lock it holds while it does: an address is believed only while its lock is held, so one left by a daemon that died is ignored (`daemon-mine.*` for the one on your Chrome). |
 
 `<workspace>` is the workspace of the directory the daemon was started from. A daemon started by a
 command in one project and then used from another keeps writing to the first one's workspace; give each

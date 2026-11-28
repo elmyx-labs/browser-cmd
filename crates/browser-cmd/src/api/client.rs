@@ -40,9 +40,9 @@ pub(crate) async fn daemon_at(address: &str, limits: &Limits) -> Result<Option<S
 
 /// The daemon's log, opened for it to write to: what the last daemon said is
 /// kept until the file is large, and nowhere at all if it cannot be opened.
-fn log(address: &str) -> std::process::Stdio {
+fn log() -> std::process::Stdio {
     const KEPT: u64 = 1 << 20;
-    let path = crate::api::app::log(address);
+    let path = crate::api::app::log();
     let _ = path.parent().map(std::fs::create_dir_all);
     let large = std::fs::metadata(&path).is_ok_and(|log| log.len() > KEPT);
     let opened =
@@ -105,24 +105,32 @@ impl Daemon {
         Ok(Self { address, session: session_id(), limits: Limits::from_env()?, token: http::token()? })
     }
 
-    /// Reach the daemon, starting `serve_with --serve ADDR` in the background if
-    /// nothing answers. The child inherits this process's directory and
-    /// environment, so it launches the same Chrome on the same profile.
+    pub(crate) fn address(&self) -> &str {
+        &self.address
+    }
+
+    /// Reach the daemon, starting `serve_with --serve` in the background if
+    /// nothing answers: at the address `BROWSER_CMD_ADDR` names, else as the
+    /// default daemon, which says where it listens. The child inherits this
+    /// process's directory and environment, so it launches the same Chrome on
+    /// the same profile.
     pub(crate) async fn connect(serve_with: &Path) -> Result<Self> {
+        let named = crate::env::var("ADDR").is_some();
         let daemon = Self::attach(http::address())?;
         match daemon_at(&daemon.address, &daemon.limits).await? {
             Some(build) if build == http::SERVER => return Ok(daemon),
             // A daemon of another build makes way for one of this one.
             Some(build) if build.starts_with("browser-cmd/") => stop(&daemon.address, &daemon.limits).await?,
-            // Anything else is not ours to stop, or to send a token to.
-            Some(_) => {
+            // Anything else is not ours to stop, or to send a token to: a port
+            // that was named is refused, the usual one left to its program.
+            Some(_) if named => {
                 return Err(Error::Tool(format!(
                     "{} is taken by something that is not browser-cmd; set BROWSER_CMD_ADDR to a free \
                      HOST:PORT",
                     daemon.address
                 )));
             }
-            None => {}
+            Some(_) | None => {}
         }
         if !http::endpoint(&daemon.address).is_ok_and(|url| http::loopback(&url)) {
             return Err(Error::Tool("remote daemon is unavailable; start it on its host".into()));
@@ -130,32 +138,38 @@ impl Daemon {
         may_start_browser()?;
         // What the daemon would refuse at startup is refused here, where the reason is seen.
         crate::api::app::settings()?;
-        let mut child = std::process::Command::new(serve_with)
-            .arg("--serve")
-            .arg(&daemon.address)
+        let mut serve = std::process::Command::new(serve_with);
+        serve.arg("--serve");
+        if named {
+            serve.arg(&daemon.address);
+        }
+        let mut child = serve
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::null())
-            .stderr(log(&daemon.address))
+            .stderr(log())
             .spawn()
             .map_err(|error| Error::Tool(format!("cannot start the browser daemon: {error}")))?;
         let ready = async {
             loop {
-                if daemon_at(&daemon.address, &daemon.limits).await?.is_some() {
-                    return Ok(());
+                let at = if named { Some(daemon.address.clone()) } else { crate::api::app::recorded() };
+                if let Some(at) = at
+                    && daemon_at(&at, &daemon.limits).await?.is_some()
+                {
+                    return Ok(at);
                 }
                 if let Some(status) = child.try_wait()? {
                     return Err(Error::Tool(format!(
                         "browser daemon exited during startup: {status}; what it said is in {}",
-                        crate::api::app::log(&daemon.address).display()
+                        crate::api::app::log().display()
                     )));
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             }
         };
-        tokio::time::timeout(daemon.limits.io, ready)
+        let address = tokio::time::timeout(daemon.limits.io, ready)
             .await
             .map_err(|_| Error::Timeout("daemon startup"))??;
-        Ok(daemon)
+        Self::attach(address)
     }
 
     /// A transport failure is an error; a command that ran and failed is an

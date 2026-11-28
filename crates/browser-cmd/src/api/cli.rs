@@ -47,7 +47,11 @@ pub async fn run(argv: &[String]) -> Result<()> {
         match crate::api::client::daemon_at(&address, &crate::api::http::Limits::from_env()?).await? {
             Some(build) if build == this => println!("daemon: up at {address}"),
             Some(build) if !build.starts_with("browser-cmd/") => {
-                println!("daemon: down ({address} is taken by something that is not browser-cmd)");
+                let next = match crate::env::var("ADDR") {
+                    Some(_) => "set BROWSER_CMD_ADDR to a free HOST:PORT",
+                    None => "a command starts one on a free port",
+                };
+                println!("daemon: down ({address} is another program's; {next})");
             }
             Some(build) => {
                 println!(
@@ -124,8 +128,8 @@ async fn restart() -> Result<()> {
     if crate::api::client::daemon_at(&address, &limits).await?.is_some() {
         crate::api::client::stop(&address, &limits).await?;
     }
-    Daemon::connect(&std::env::current_exe()?).await?;
-    println!("daemon: restarted at {address}");
+    let daemon = Daemon::connect(&std::env::current_exe()?).await?;
+    println!("daemon: restarted at {}", daemon.address());
     Ok(())
 }
 

@@ -14,7 +14,7 @@ browser-cmd restart              stop the daemon (its Chrome closes) and start i
 browser-cmd stop                 stop the daemon; its Chrome closes with it
 browser-cmd batch <<'EOF'        several commands, one per line, in one call
 browser-cmd back | forward       the same as navigate back | navigate forward
-browser-cmd --serve [ADDR]       run the daemon in the foreground (default 127.0.0.1:7788)
+browser-cmd --serve [ADDR]       run the daemon in the foreground (default: 127.0.0.1:7788, or any free port)
 browser-cmd --help               the command catalogue
 browser-cmd <command> --help     one command's syntax
 browser-cmd --version            the version, and the commit it was built from

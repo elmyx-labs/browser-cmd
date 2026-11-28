@@ -30,7 +30,7 @@ close tabs it should not see, and read [SECURITY.md](../SECURITY.md#attaching-to
    config file: the tab it turns to then comes forward, with Chrome.
 
 The daemon for your Chrome runs beside the one for browser-cmd's own browser (on port 7789 instead of
-7788, unless `BROWSER_CMD_ADDR` says otherwise), so a project set to `chrome = "mine"` and one that is
+7788 when it is free, unless `BROWSER_CMD_ADDR` says otherwise), so a project set to `chrome = "mine"` and one that is
 not work at the same time, and switching needs no restart. Turn Remote Debugging off again when the
 work is done.
 

@@ -12,6 +12,8 @@ pub(crate) const BUILD: &str = env!("BROWSER_CMD_BUILD");
 pub(crate) const SERVER: &str = concat!("browser-cmd/", env!("BROWSER_CMD_BUILD"));
 pub(crate) const SESSION_HEADER: &str = "browser-session";
 
+/// Where the default daemon listens when the port is free; when another
+/// program has it, the daemon takes any and writes where (`app::recorded`).
 const DEFAULT_ADDRESS: &str = "127.0.0.1:7788";
 /// A daemon on a person's own Chrome listens beside the one on its own browser.
 const MINE_ADDRESS: &str = "127.0.0.1:7789";
@@ -50,8 +52,15 @@ impl Limits {
     }
 }
 
+/// The daemon's address: the one `BROWSER_CMD_ADDR` names, else where the
+/// default daemon said it listens, else its usual port.
 pub(crate) fn address() -> String {
-    crate::env::var("ADDR").unwrap_or_else(|| if mine() { MINE_ADDRESS } else { DEFAULT_ADDRESS }.to_owned())
+    crate::env::var("ADDR").or_else(crate::api::app::recorded).unwrap_or_else(|| usual().to_owned())
+}
+
+/// The port the default daemon tries first.
+pub(crate) fn usual() -> &'static str {
+    if mine() { MINE_ADDRESS } else { DEFAULT_ADDRESS }
 }
 
 /// Whether the browser is the person's own Chrome (`BROWSER_CMD_CHROME=mine`).
