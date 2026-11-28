@@ -80,7 +80,7 @@ pub(crate) async fn choose(session: &mut Session, args: Value) -> Result<String>
             args.text
         )));
     }
-    if !options.iter().any(|option| words.iter().any(|word| score(&option.key, word) > 0)) {
+    if !related(&options, &words) {
         let names = options.iter().take(SHOWN).map(|option| format!("{:?}", option.text)).collect::<Vec<_>>();
         return Err(Error::Tool(format!(
             "the suggestions under {reference} do not match {wanted:?}: {}. Repeat with other text, or with \
@@ -147,8 +147,9 @@ async fn suggestions(
         let seen =
             session.document.world.call_on(tab, node, SUGGESTIONS, vec![json!("look"), json!([])]).await?;
         let options: Vec<Suggestion> = serde_json::from_value(seen["options"].clone())?;
-        let related = options.iter().any(|option| words.iter().any(|word| score(&option.key, word) > 0));
-        if related && seen["fresh"] == true && seen["quiet"].as_f64().is_some_and(|quiet| quiet >= QUIET_MS)
+        if related(&options, words)
+            && seen["fresh"] == true
+            && seen["quiet"].as_f64().is_some_and(|quiet| quiet >= QUIET_MS)
             || typed.elapsed() >= ARRIVE
         {
             return Ok(options.into_iter().filter(|option| !option.key.is_empty()).collect());
@@ -269,6 +270,11 @@ fn unsure(reference: &str, wanted: &str, names: &[String], total: usize) -> Erro
 /// How well an option's text matches a query, both already compared as words:
 /// 100 the same, 90 the option starts with the whole query, 80 each query word
 /// begins a word of the option, else 40 for the share of query words that do.
+/// Whether any suggestion shares a word with what was typed.
+fn related(options: &[Suggestion], words: &[String]) -> bool {
+    options.iter().any(|option| words.iter().any(|word| score(&option.key, word) > 0))
+}
+
 fn score(option: &str, query: &str) -> u32 {
     let words: Vec<&str> = query.split_whitespace().collect();
     if option == query {

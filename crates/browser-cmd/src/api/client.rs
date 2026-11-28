@@ -120,7 +120,7 @@ impl Daemon {
         match daemon_at(&daemon.address, &daemon.limits).await? {
             Some(build) if build == http::SERVER => return Ok(daemon),
             // A daemon of another build makes way for one of this one.
-            Some(build) if build.starts_with("browser-cmd/") => stop(&daemon.address, &daemon.limits).await?,
+            Some(build) if http::ours(&build) => stop(&daemon.address, &daemon.limits).await?,
             // Anything else is not ours to stop, or to send a token to: a port
             // that was named is refused, the usual one left to its program.
             Some(_) if named => {

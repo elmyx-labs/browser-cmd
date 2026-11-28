@@ -141,13 +141,9 @@ pub(crate) async fn scroll_to_text(session: &mut Session, tab: &Tab, text: &str)
 /// reporting a zero that reads like an answer.
 fn travelled(before: &Value, after: &Value, direction: &str) -> String {
     let sideways = matches!(direction, "left" | "right");
-    let (now, was) = match sideways {
-        true => (&after["left"], &before["left"]),
-        false => (&after["top"], &before["top"]),
-    };
-    let reach = match sideways {
-        true => &after["maxLeft"],
-        false => &after["max"],
+    let (now, was, reach) = match sideways {
+        true => (&after["left"], &before["left"], &after["maxLeft"]),
+        false => (&after["top"], &before["top"], &after["max"]),
     };
     match after["kind"].as_str() {
         Some("frame") => "The pointer is over another document, which this page cannot measure: \

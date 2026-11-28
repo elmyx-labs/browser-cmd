@@ -197,7 +197,7 @@ async fn dispatch(
     // A command that was not started says so and why: nothing happened in the browser.
     let not_started = |why: String| {
         let outcome = Outcome::failed(format!("Error: not started, so nothing was done: {why}"), "tool");
-        respond(&state.limits, "200 OK", None, serde_json::to_string(&outcome).unwrap_or_default())
+        answer(&state.limits, None, &outcome)
     };
     let Ok(asked) = serde_json::from_slice::<Request>(body) else {
         return refuse("400 Bad Request");
@@ -205,7 +205,7 @@ async fn dispatch(
     if asked.command == "restart" {
         state.stop.notify_one();
         let stopping = Outcome { ok: true, output: "stopping".into(), ..Outcome::default() };
-        return respond(&state.limits, "200 OK", None, serde_json::to_string(&stopping).unwrap_or_default());
+        return answer(&state.limits, None, &stopping);
     }
     let Some(command) = crate::api::command::find(&asked.command) else {
         return refuse("404 Not Found");
@@ -272,7 +272,7 @@ async fn dispatch(
             "unacknowledged",
         ),
     };
-    respond(&state.limits, "200 OK", Some(&id), serde_json::to_string(&outcome).unwrap_or_default())
+    answer(&state.limits, Some(&id), &outcome)
 }
 
 /// The session a name holds, opened on its first request; none when every
@@ -296,6 +296,11 @@ fn open(state: &Rc<ServerState>, id: &str) -> Option<Rc<tokio::sync::Mutex<Sessi
 }
 
 /// A reply with a JSON body, or an empty 500 for a body over the limit.
+/// An outcome, sent as the body of a 200.
+fn answer(limits: &Limits, session: Option<&str>, outcome: &Outcome) -> String {
+    respond(limits, "200 OK", session, serde_json::to_string(outcome).unwrap_or_default())
+}
+
 fn respond(limits: &Limits, status: &str, session: Option<&str>, body: String) -> String {
     let (status, body) = if body.len() > limits.response_bytes {
         ("500 Internal Server Error", String::new())

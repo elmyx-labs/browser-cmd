@@ -460,7 +460,14 @@ pub const CATALOGUE: &[Command] = &[
                 caller-specific isolated world, separate from page globals and from internal helpers; \
                 DOM changes are shared and globals persist on the same document. Use the pointer and \
                 keyboard commands for trusted input — a scripted write may not notify a framework.",
-        parse: |rest| Ok(json!({ "expression": rest.join(" ") })),
+        // Read here, after a lone `{` is taken for JSON arguments, so a script from stdin may start with one.
+        parse: |rest| {
+            let expression = match rest {
+                [only] if only == "-" => std::io::read_to_string(std::io::stdin())?,
+                _ => rest.join(" "),
+            };
+            Ok(json!({ "expression": expression }))
+        },
         changing: true,
         run: run!(crate::tools::script::eval),
     },

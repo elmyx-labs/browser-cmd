@@ -21,10 +21,10 @@ fn chrome(settings: &crate::Settings) -> Result<String> {
     Ok(format!("{}, {window}, profile {}", executable.display(), settings.profile.display()))
 }
 
-async fn daemon(address: &str) -> Result<String> {
+pub(crate) async fn daemon(address: &str) -> Result<String> {
     Ok(match client::daemon_at(address, &http::Limits::from_env()?).await? {
         Some(build) if build == http::SERVER => format!("up at {address}, this build"),
-        Some(build) if build.starts_with("browser-cmd/") => {
+        Some(build) if http::ours(&build) => {
             format!("up at {address} as {build}; the next command replaces it with this build")
         }
         Some(_) if crate::env::var("ADDR").is_some() => {

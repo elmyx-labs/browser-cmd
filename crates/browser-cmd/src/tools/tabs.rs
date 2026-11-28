@@ -112,8 +112,8 @@ pub(crate) async fn tab(session: &mut Session, args: Value) -> Result<String> {
             after(session, &tab, &format!("Opened tab {name}")).await
         }
         other => Err(Error::Tool(format!(
-            "tab action must be list, check, tidy, keep, unkeep, switch, new, close, restore, use or give, not \
-             {other}"
+            "tab action must be list, check, tidy, keep, unkeep, switch, show, new, close, restore, use or give, \
+             not {other}"
         ))),
     }
 }

@@ -12,6 +12,11 @@ pub(crate) const BUILD: &str = env!("BROWSER_CMD_BUILD");
 pub(crate) const SERVER: &str = concat!("browser-cmd/", env!("BROWSER_CMD_BUILD"));
 pub(crate) const SESSION_HEADER: &str = "browser-session";
 
+/// Whether a `Server` header names a browser-cmd daemon, of this build or another.
+pub(crate) fn ours(build: &str) -> bool {
+    build.starts_with("browser-cmd/")
+}
+
 /// Where the default daemon listens when the port is free; when another
 /// program has it, the daemon takes any and writes where (`app::recorded`).
 const DEFAULT_ADDRESS: &str = "127.0.0.1:7788";
@@ -118,7 +123,7 @@ pub(crate) fn authority(value: &str, local: std::net::SocketAddr) -> Option<url:
     if !bare(&url) || url.host().is_none() || url.port_or_known_default() != Some(local.port()) {
         return None;
     }
-    if local.ip().is_loopback() && !local_origin(url.as_str()) {
+    if local.ip().is_loopback() && !loopback(&url) {
         return None;
     }
     Some(url)
@@ -130,12 +135,6 @@ pub(crate) fn same_origin(origin: &str, host: &url::Url) -> bool {
         && bare(&url)
         && url.port_or_known_default() == host.port_or_known_default()
         && url.host() == host.host()
-}
-
-/// Origin is a URL authority, never a substring in an attacker-controlled string.
-fn local_origin(origin: &str) -> bool {
-    let Ok(url) = url::Url::parse(origin) else { return false };
-    matches!(url.scheme(), "http" | "https") && bare(&url) && loopback(&url)
 }
 
 /// An authority and nothing else: no credentials, no path, query or fragment.
@@ -179,19 +178,19 @@ mod origin_tests {
     }
 
     #[test]
-    fn origins_are_exact_loopback_authorities() {
-        for origin in [
-            "https://localhost.evil.example",
-            "http://127.0.0.1.evil.example",
-            "https://evil.example/?x=://localhost",
-            "http://user@localhost",
-            "null",
-            "file://localhost",
+    fn a_loopback_daemon_answers_only_an_exact_loopback_host() {
+        let local: std::net::SocketAddr = "127.0.0.1:7788".parse().unwrap();
+        for host in [
+            "localhost.evil.example:7788",
+            "127.0.0.1.evil.example:7788",
+            "evil.example:7788/?x=://localhost",
+            "user@localhost:7788",
+            "localhost:7789",
         ] {
-            assert!(!local_origin(origin), "{origin}");
+            assert!(authority(host, local).is_none(), "{host}");
         }
-        for origin in ["http://localhost:7788", "http://127.0.0.1", "http://[::1]:7788"] {
-            assert!(local_origin(origin), "{origin}");
+        for host in ["localhost:7788", "127.0.0.1:7788", "[::1]:7788"] {
+            assert!(authority(host, local).is_some(), "{host}");
         }
     }
 }

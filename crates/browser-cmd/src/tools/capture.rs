@@ -93,7 +93,7 @@ pub(crate) async fn screenshot(session: &mut Session, args: Value) -> Result<Str
     let (width, height) = crate::page::view::viewport(&mut session.document.world, &tab).await?;
     // A picture whose page is unknown is evidence for nothing.
     let at = crate::web::shown(&tab.url().await?);
-    let raw = raw_document(session, &tab).await.map_or_else(String::new, |warning| format!("{warning}\n"));
+    let raw = raw_document(session, &tab).await;
     // Only a viewport shot's pixels are where a click lands; the model acts on what is said.
     let said = match (what, clip) {
         (Some(what), Some((w, h))) => format!(
@@ -134,7 +134,7 @@ pub(crate) async fn evidence(session: &mut Session, args: Value) -> Result<Strin
     let tab = session.current().await?;
     let found = session.document.world.call(&tab, EVIDENCE, vec![json!(args.values)]).await?;
     let (width, height) = crate::page::view::viewport(&mut session.document.world, &tab).await?;
-    let raw = raw_document(session, &tab).await.map_or_else(String::new, |warning| format!("{warning}\n"));
+    let raw = raw_document(session, &tab).await;
     let mut out = format!("{raw}Evidence in the {width}x{height} viewport of {}:", tab.url().await?);
     for item in found.as_array().into_iter().flatten() {
         out.push_str(&format!("\n- {}: {}", json!(item["value"]), finding(item, height)));
@@ -185,18 +185,18 @@ fn finding(item: &Value, height: f64) -> String {
     format!("{said}{fields}")
 }
 
-/// A warning when the tab shows a raw document — JSON, plain text, XML —
+/// A warning line when the tab shows a raw document — JSON, plain text, XML —
 /// rather than a rendered page, which a picture of is poor evidence of what a
-/// person would see.
-async fn raw_document(session: &mut Session, tab: &Tab) -> Option<String> {
-    let document = session.document.world.call(tab, crate::page::js::DOCUMENT, Vec::new()).await.ok()?;
-    let kind = document["contentType"].as_str()?;
-    if kind.contains("json") {
-        return Some("[warning] evidence page is raw JSON; open a rendered page for a screenshot".into());
-    }
-    (!(matches!(kind, "text/html" | "application/xhtml+xml" | "application/pdf")
-        || kind.starts_with("image/")))
-    .then(|| {
-        format!("[warning] evidence page is a raw {kind} document; open a rendered page for a screenshot")
-    })
+/// person would see; nothing for a rendered page or one that cannot be read.
+async fn raw_document(session: &mut Session, tab: &Tab) -> String {
+    let document =
+        session.document.world.call(tab, crate::page::js::DOCUMENT, Vec::new()).await.unwrap_or_default();
+    let kind = document["contentType"].as_str().unwrap_or("text/html");
+    let what = match kind {
+        _ if kind.contains("json") => "raw JSON".to_owned(),
+        "text/html" | "application/xhtml+xml" | "application/pdf" => return String::new(),
+        _ if kind.starts_with("image/") => return String::new(),
+        _ => format!("a raw {kind} document"),
+    };
+    format!("[warning] evidence page is {what}; open a rendered page for a screenshot\n")
 }

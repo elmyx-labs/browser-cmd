@@ -42,24 +42,8 @@ pub async fn run(argv: &[String]) -> Result<()> {
     }
     // A health check that starts nothing: is the daemon up, and what is open.
     if name == "status" {
-        let address = crate::api::http::address();
-        let this = crate::api::http::SERVER;
-        match crate::api::client::daemon_at(&address, &crate::api::http::Limits::from_env()?).await? {
-            Some(build) if build == this => println!("daemon: up at {address}"),
-            Some(build) if !build.starts_with("browser-cmd/") => {
-                let next = match crate::env::var("ADDR") {
-                    Some(_) => "set BROWSER_CMD_ADDR to a free HOST:PORT",
-                    None => "a command starts one on a free port",
-                };
-                println!("daemon: down ({address} is another program's; {next})");
-            }
-            Some(build) => {
-                println!(
-                    "daemon: up at {address}, but it is {build} and this is {this}; the next command replaces it"
-                );
-            }
-            None => println!("daemon: down (nothing at {address}; a command starts one)"),
-        }
+        let found = crate::api::doctor::daemon(&crate::api::http::address()).await;
+        println!("daemon: {}", found.unwrap_or_else(|error| format!("down ({error})")));
         if let Some(clock) = local_time() {
             println!("Local time: {clock}");
         }
@@ -81,9 +65,6 @@ pub async fn run(argv: &[String]) -> Result<()> {
     if rest.len() == 1 && matches!(rest[0].as_str(), "--help" | "-h") {
         println!("{} {}\n\n{}", command.name, command.usage, command.about);
         return Ok(());
-    }
-    if command.name == "eval" && rest == ["-"] {
-        rest = vec![std::io::read_to_string(std::io::stdin())?];
     }
     let arguments = command.arguments(&rest)?;
     mark_used();
@@ -125,7 +106,11 @@ pub async fn run(argv: &[String]) -> Result<()> {
 async fn restart() -> Result<()> {
     let address = crate::api::http::address();
     let limits = crate::api::http::Limits::from_env()?;
-    if crate::api::client::daemon_at(&address, &limits).await?.is_some() {
+    // Only a browser-cmd daemon is stopped: another program on the port is not asked, nor sent a token.
+    if crate::api::client::daemon_at(&address, &limits)
+        .await?
+        .is_some_and(|build| crate::api::http::ours(&build))
+    {
         crate::api::client::stop(&address, &limits).await?;
     }
     let daemon = Daemon::connect(&std::env::current_exe()?).await?;
@@ -137,7 +122,7 @@ async fn stop() -> Result<()> {
     let address = crate::api::http::address();
     let limits = crate::api::http::Limits::from_env()?;
     match crate::api::client::daemon_at(&address, &limits).await? {
-        Some(build) if build.starts_with("browser-cmd/") => {
+        Some(build) if crate::api::http::ours(&build) => {
             crate::api::client::stop(&address, &limits).await?;
             println!("daemon: stopped at {address}, its Chrome closed");
         }

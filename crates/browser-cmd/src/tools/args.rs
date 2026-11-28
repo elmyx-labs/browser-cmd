@@ -52,7 +52,7 @@ impl OneOrMany {
 }
 
 /// Where an action lands: an element from the latest state, or a point.
-#[derive(Default, Deserialize)]
+#[derive(Deserialize)]
 pub(crate) struct Target {
     pub(crate) r#ref: Option<String>,
     pub(crate) x: Option<f64>,

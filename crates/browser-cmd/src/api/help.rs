@@ -39,7 +39,7 @@ const SUMMARY: &str = "browser-cmd: a real Chrome for an agent, driven from the 
 
 Usage:
   browser-cmd <command> [args]     run one browser action against a warm daemon
-  browser-cmd status               is the daemon up
+  browser-cmd status               is the daemon up, and the local date and time zone
   browser-cmd doctor               what a command would run into: the build, the Chrome
                                    found and the daemon; starts nothing
   browser-cmd restart              stop the daemon and start it with the current settings
@@ -66,7 +66,7 @@ on stderr. The browser is configured by BROWSER_CMD_* variables, or the same
 names lowercased in ~/.browser-cmd/config.toml or the workspace's
 .browser-cmd/config.toml: CHROME (own or mine), SITES, FOLLOW, PROFILE, CDP,
 EXECUTABLE, HEADLESS, NO_SANDBOX, ARGS, WINDOW, LANGUAGE, TIMEZONE, PROXY,
-PROXY_HOSTS, DIALOGS, PACE, NETWORK, NETWORK_NOTES and AWARENESS.
+PROXY_HOSTS, DIALOGS, PACE, NETWORK, NETWORK_NOTES, CANVAS_TEXT and AWARENESS.
 ";
 
 #[cfg(test)]
