@@ -228,9 +228,13 @@ impl Cdp {
     }
 
     /// A new browser context's identity; none when the browser gave none.
-    pub(crate) async fn create_browser_context(&self) -> Result<Option<String>> {
+    pub(crate) async fn create_browser_context(&self) -> Result<String> {
         let created = self.call(None, "Target.createBrowserContext", json!({})).await?;
-        Ok(created["browserContextId"].as_str().filter(|id| !id.is_empty()).map(str::to_owned))
+        created["browserContextId"]
+            .as_str()
+            .filter(|id| !id.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| Error::Protocol("Chrome returned no browser context identity".into()))
     }
 
     pub(crate) async fn context_exists(&self, id: &str) -> Result<bool> {

@@ -83,7 +83,7 @@ pub(crate) async fn identity(cdp: &Rc<Cdp>, settings: &Settings) -> Result<Ident
 
 pub(crate) async fn apply_identity(tab: &Tab, identity: &Identity) -> Result<()> {
     tab.call("Network.setUserAgentOverride", identity.overrides()).await?;
-    warn_if_software_rendered(tab, &mut World::new()).await;
+    warn_if_software_rendered(tab).await;
     Ok(())
 }
 
@@ -93,14 +93,14 @@ pub(crate) async fn apply_identity(tab: &Tab, identity: &Identity) -> Result<()>
 /// contradict. It is honest, not silent: the operator is told once, and told
 /// the fix, which is a real GPU or a headed browser under a virtual display
 /// (`xvfb-run` on Linux) rather than headless.
-async fn warn_if_software_rendered(tab: &Tab, world: &mut World) {
+async fn warn_if_software_rendered(tab: &Tab) {
     use std::sync::atomic::{AtomicBool, Ordering};
     // The GPU is the machine's: one look per process answers for every tab.
     static PROBED: AtomicBool = AtomicBool::new(false);
     if PROBED.swap(true, Ordering::Relaxed) {
         return;
     }
-    let renderer = crate::page::canvas::webgl_renderer(world, tab)
+    let renderer = crate::page::canvas::webgl_renderer(&mut World::new(), tab)
         .await
         .ok()
         .and_then(|value| value.as_str().map(str::to_owned))

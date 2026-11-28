@@ -9,9 +9,9 @@
 //! are the two things a browser is for that fetching the HTML is not.
 //!
 //! It runs a real Chrome that presents itself as an ordinary user's browser:
-//! stable Google Chrome with a normal command line and no automation flags, a
-//! window when there is a display and a headful-equivalent fingerprint when
-//! there is not, no `Runtime.enable`, every script in an isolated world, and a
+//! stable Google Chrome with a normal command line and no automation flags,
+//! headless with a headful-equivalent fingerprint unless a window is asked
+//! for, no `Runtime.enable`, every script in an isolated world, and a
 //! pointer and keyboard at a person's tempo. A simple "verify you are human"
 //! checkbox is ticked the way a user would tick it.
 //!
@@ -22,7 +22,7 @@
 //! lives, and an element can be named by the words on it instead.
 //!
 //! A `Host` is one browser — launched, or attached to — and a `Session` is one
-//! agent on it: one tab, one set of handles. The daemon keeps one host and hands
+//! agent on it: its tabs and their handles. The daemon keeps one host and hands
 //! out sessions; the CLI reaches them over loopback HTTP.
 
 mod api;

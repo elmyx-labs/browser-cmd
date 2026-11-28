@@ -47,11 +47,7 @@ impl Book {
             self.context = Some(context);
             return Ok(());
         }
-        let id = shared
-            .cdp
-            .create_browser_context()
-            .await?
-            .ok_or_else(|| Error::Protocol("replacement browser returned no context identity".into()))?;
+        let id = shared.cdp.create_browser_context().await?;
         self.context = Some(BrowserContext::new(shared.cdp.clone(), id));
         Err(Error::Tool(
             "previous isolated context is unavailable; a new empty isolated context was created. Prior \
@@ -176,10 +172,7 @@ struct Pending {
 
 impl Pending {
     async fn create(cdp: &Rc<Cdp>) -> Result<Self> {
-        let id = cdp
-            .create_browser_context()
-            .await?
-            .ok_or_else(|| Error::Protocol("Chrome returned no browser context identity".into()))?;
+        let id = cdp.create_browser_context().await?;
         Ok(Self { cdp: cdp.clone(), id, committed: false })
     }
 }

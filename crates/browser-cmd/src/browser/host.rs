@@ -153,6 +153,17 @@ impl Host {
 
     /// The browser, started on first use and again if it went away. The lock
     /// is what keeps two sessions from starting two Chromes on one profile.
+    /// A connection made ready for tabs: the browser's pages known, its pace
+    /// set, and the identity a headless browser wears put on.
+    async fn ready(&self, cdp: &Cdp, identity: Option<&Identity>) -> Result<()> {
+        cdp.discover().await?;
+        cdp.pace(self.settings.pace);
+        if let Some(identity) = identity {
+            cdp.disguise(identity.overrides()).await?;
+        }
+        Ok(())
+    }
+
     pub(crate) async fn shared(&self) -> Result<Rc<Shared>> {
         let mut slot = self.shared.lock().await;
         if let Some(shared) = &*slot
@@ -185,11 +196,7 @@ impl Host {
                     )));
                 }
             };
-            cdp.discover().await?;
-            cdp.pace(self.settings.pace);
-            if let Some(identity) = &previous.identity {
-                cdp.disguise(identity.overrides()).await?;
-            }
+            self.ready(&cdp, previous.identity.as_ref()).await?;
             let shared = Rc::new(Shared {
                 cdp: Rc::new(cdp),
                 identity: previous.identity.clone(),
@@ -216,12 +223,8 @@ impl Host {
             true => Some(crate::browser::identity::identity(&cdp, &self.settings).await?),
             false => None,
         };
-        cdp.discover().await?;
-        cdp.pace(self.settings.pace);
-        if let Some(identity) = &identity {
-            cdp.disguise(identity.overrides()).await?;
-        }
-        let shared = Shared {
+        self.ready(&cdp, identity.as_ref()).await?;
+        let shared = Rc::new(Shared {
             cdp,
             identity,
             process: chrome.map(|chrome| {
@@ -230,8 +233,7 @@ impl Host {
                     proxy: guard.map(|(_, task)| task),
                 })
             }),
-        };
-        let shared = Rc::new(shared);
+        });
         *slot = Some(shared.clone());
         Ok(shared)
     }

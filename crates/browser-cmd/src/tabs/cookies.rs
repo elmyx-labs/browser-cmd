@@ -24,7 +24,7 @@ pub(crate) fn select(reply: &Value, url: &url::Url) -> Result<Vec<Value>> {
             .filter(|domain| !domain.is_empty())
             .ok_or_else(|| Error::Protocol("browser cookie has no domain".into()))?;
         let matches = match domain.strip_prefix('.') {
-            Some(domain) => host == domain || host.ends_with(&format!(".{domain}")),
+            Some(domain) => crate::web::within(host, domain),
             None => host == domain,
         };
         if matches {

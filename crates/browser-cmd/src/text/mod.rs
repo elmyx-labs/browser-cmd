@@ -10,9 +10,6 @@ const ELLIPSIS: char = '…';
 
 /// The longest prefix of `text` that fits in `limit` bytes.
 pub(crate) fn head(text: &str, limit: usize) -> &str {
-    if text.len() <= limit {
-        return text;
-    }
     &text[..floor(text, limit)]
 }
 

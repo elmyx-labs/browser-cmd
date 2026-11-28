@@ -1,6 +1,6 @@
 //! What the browser can be told. Every field has a default; the few an operator
 //! turns are read from `BROWSER_CMD_*` variables, and the rest are constants a
-//! test or an embedding application may still set directly.
+//! test may still set directly.
 
 use std::{path::PathBuf, time::Duration};
 
@@ -236,15 +236,17 @@ impl Settings {
         }
         settings.attach = match var("CHROME").as_deref() {
             None | Some("own") => var("CDP"),
-            Some("mine") => Some(mine::endpoint()?),
+            Some("mine") => {
+                settings.mine = true;
+                Some(mine::endpoint()?)
+            }
             Some(other) => {
                 return Err(Error::Config(format!("BROWSER_CMD_CHROME={other:?} is not own or mine")));
             }
         };
-        settings.mine = settings.attach.is_some() && var("CHROME").as_deref() == Some("mine");
         settings.executable = var("EXECUTABLE").map(PathBuf::from);
         settings.headless = flag("HEADLESS")?.unwrap_or(settings.headless);
-        settings.no_sandbox = flag("NO_SANDBOX")?.unwrap_or(false);
+        settings.no_sandbox = flag("NO_SANDBOX")?.unwrap_or(settings.no_sandbox);
         settings.chrome_args =
             var("ARGS").map(|args| args.split_whitespace().map(str::to_owned).collect()).unwrap_or_default();
         settings.proxy = var("PROXY").map(|value| UpstreamProxy::parse(&value)).transpose()?;
@@ -289,19 +291,16 @@ impl Settings {
             }
             settings.pace = pace;
         }
-        settings.network_notes = flag("NETWORK_NOTES")?.unwrap_or(false);
-        settings.network = flag("NETWORK")?.unwrap_or(false);
-        settings.canvas_text = flag("CANVAS_TEXT")?.unwrap_or(false);
-        settings.awareness = flag("AWARENESS")?.unwrap_or(true);
+        settings.network_notes = flag("NETWORK_NOTES")?.unwrap_or(settings.network_notes);
+        settings.network = flag("NETWORK")?.unwrap_or(settings.network);
+        settings.canvas_text = flag("CANVAS_TEXT")?.unwrap_or(settings.canvas_text);
+        settings.awareness = flag("AWARENESS")?.unwrap_or(settings.awareness);
         Ok(settings)
     }
 
     /// Whether the agent may act on pages at `host`.
     pub fn allows(&self, host: &str) -> bool {
-        self.sites.is_empty()
-            || self.sites.iter().any(|site| {
-                host == site || host.strip_suffix(site.as_str()).is_some_and(|sub| sub.ends_with('.'))
-            })
+        self.sites.is_empty() || self.sites.iter().any(|site| crate::web::within(host, site))
     }
 }
 

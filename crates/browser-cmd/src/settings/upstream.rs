@@ -44,10 +44,8 @@ impl UpstreamProxy {
             ));
         }
         let host = proxy_host(&url)?;
-        let port = url.port_or_known_default().unwrap_or(match kind {
-            UpstreamKind::Http => 80,
-            UpstreamKind::Socks5 => 1080,
-        });
+        // http has its known default; socks has none.
+        let port = url.port_or_known_default().unwrap_or(1080);
         if port == 0 {
             return Err(Error::Config("BROWSER_CMD_PROXY port must be nonzero".into()));
         }

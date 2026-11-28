@@ -97,13 +97,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_subdirectory_is_in_the_workspace_of_its_git_work_tree() {
-        let temp = tempfile::tempdir().unwrap();
-        let deep = temp.path().join("project/src/deep");
-        std::fs::create_dir_all(&deep).unwrap();
-        assert_eq!(crate::env::repository(&deep), deep, "no work tree: the directory itself");
-        std::fs::create_dir(temp.path().join("project/.git")).unwrap();
-        assert_eq!(crate::env::repository(&deep), temp.path().join("project"));
+    fn a_workspace_digest_is_fnv_1a() {
         assert_eq!(digest(""), 0xcbf2_9ce4_8422_2325);
         assert_eq!(digest("a"), 0xaf63_dc4c_8601_ec8c, "FNV-1a, not a hash that may change between builds");
     }

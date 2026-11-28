@@ -1,6 +1,6 @@
 //! The environment: `BROWSER_CMD_*` variables, read strictly — a value that does
 //! not parse is a configuration error, never a silent default — the config
-//! files behind them, and whether a window can be shown.
+//! files behind them.
 
 use std::{
     collections::HashMap,
@@ -110,6 +110,16 @@ fn parse_config(text: &str) -> std::result::Result<Vec<(String, String)>, String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_subdirectory_is_in_the_repository_of_its_git_work_tree() {
+        let temp = tempfile::tempdir().unwrap();
+        let deep = temp.path().join("project/src/deep");
+        std::fs::create_dir_all(&deep).unwrap();
+        assert_eq!(repository(&deep), deep, "no work tree: the directory itself");
+        std::fs::create_dir(temp.path().join("project/.git")).unwrap();
+        assert_eq!(repository(&deep), temp.path().join("project"));
+    }
 
     #[test]
     fn a_config_file_is_flat_keys_with_quoted_or_bare_values_and_comments() {

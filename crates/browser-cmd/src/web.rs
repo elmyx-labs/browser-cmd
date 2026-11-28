@@ -55,6 +55,11 @@ const SITE_TRACKING: &[(&str, &[&str])] = &[
     ("youtube.", &["si", "pp", "feature", "ab_channel"]),
 ];
 
+/// Whether `host` is `domain` or one of its subdomains.
+pub(crate) fn within(host: &str, domain: &str) -> bool {
+    host == domain || host.strip_suffix(domain).is_some_and(|sub| sub.ends_with('.'))
+}
+
 /// An address as the agent is shown it: a search engine's redirect is the
 /// address it leads to, and the parameters that only track the visit are gone.
 /// The rest of the query is kept byte for byte, so the address still opens.

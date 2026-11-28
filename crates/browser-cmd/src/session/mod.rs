@@ -1,4 +1,4 @@
-//! One agent's session: its tab, that tab's document, the hand it acts with,
+//! One agent's session: its tabs, the current one's document, the hand it acts with,
 //! its output, and the memory that tells it when it is going in circles.
 
 mod after;
@@ -60,7 +60,7 @@ pub(crate) struct Session {
 
 impl Host {
     /// A session of its own on this browser, under a name of its own, kept
-    /// nowhere: a tab and a set of handles.
+    /// nowhere: its own tabs and handles.
     #[cfg(test)]
     pub(crate) fn session(self: &Rc<Self>) -> Session {
         static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(1);
