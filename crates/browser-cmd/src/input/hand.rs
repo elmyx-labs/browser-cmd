@@ -101,14 +101,14 @@ impl Hand {
         hand
     }
 
-    /// Uniform in `0..1`. xorshift is plenty: nothing here is secret, it only
-    /// has to not be the same every time.
     /// Whether the pointer drifts about the page before this click, as a
     /// person's hand sometimes does; never at pace 0.
     pub(crate) fn may_wander(&mut self) -> bool {
         self.pace > 0.0 && self.random() < tempo::WANDER
     }
 
+    /// Uniform in `0..1`. xorshift is plenty: nothing here is secret, it only
+    /// has to not be the same every time.
     pub(crate) fn random(&mut self) -> f64 {
         self.seed ^= self.seed << 13;
         self.seed ^= self.seed >> 7;

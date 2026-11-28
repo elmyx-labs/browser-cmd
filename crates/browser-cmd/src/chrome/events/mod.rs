@@ -55,13 +55,13 @@ impl Events {
         let session = message["sessionId"].as_str();
         let params = &message["params"];
         let method = message["method"].as_str().unwrap_or_default();
-        if let Some(session) = session {
-            self.frames.event(session, method, params);
-            self.activity.event(session, method, params);
-            self.traffic.event(session, method, params);
-        }
-        if session.is_none() {
-            self.targets.event(method, params);
+        match session {
+            Some(session) => {
+                self.frames.event(session, method, params);
+                self.activity.event(session, method, params);
+                self.traffic.event(session, method, params);
+            }
+            None => self.targets.event(method, params),
         }
         if method == "Target.targetDestroyed"
             && let Some(target) = params["targetId"].as_str()

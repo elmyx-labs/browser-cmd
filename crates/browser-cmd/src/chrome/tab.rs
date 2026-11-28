@@ -87,9 +87,7 @@ impl Tab {
             context,
         })
     }
-}
 
-impl Tab {
     /// Bring the tab to the front: its window and, with it, the browser.
     pub(crate) async fn activate(&self) -> Result<()> {
         self.cdp.call(None, "Target.activateTarget", json!({ "targetId": self.target })).await.map(drop)

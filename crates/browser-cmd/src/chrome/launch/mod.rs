@@ -20,7 +20,7 @@ use serde_json::json;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 use crate::chrome::cdp::Cdp;
-use crate::chrome::discover::{active_port, chrome_to_launch, debugger_url};
+use crate::chrome::discover::{active_endpoint, chrome_to_launch, debugger_url};
 use crate::{Error, Result, Settings};
 use arguments::arguments;
 
@@ -65,7 +65,7 @@ pub(crate) async fn open(
             // It is reused only when it was started exactly as this one would
             // be: one launched without this proxy, or behind a forwarder that
             // died with its daemon, would send every page the wrong way.
-            if let Some(url) = active_port(&settings.profile, request).await
+            if let Some(url) = active_endpoint(&settings.profile, request).await
                 && let Ok(cdp) = Cdp::connect(&url, request, dialogs).await
             {
                 let launched = std::fs::read_to_string(settings.profile.join(LAUNCH_RECORD)).ok();
@@ -226,7 +226,7 @@ mod tests {
         let first = settings(&temp);
         let (mut leftover, _) = spawn(&first, None).await.unwrap();
         // A leftover has long since noted its port; a fresh one notes it a moment after listening.
-        while active_port(&first.profile, Duration::from_secs(5)).await.is_none() {
+        while active_endpoint(&first.profile, Duration::from_secs(5)).await.is_none() {
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
         let mut second = first.clone();

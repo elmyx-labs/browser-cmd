@@ -38,7 +38,22 @@ pub(crate) async fn box_of(tab: &Tab, node: i64, quad: Quad) -> Result<Option<Re
         Quad::Content => "content",
         Quad::Border => "border",
     };
-    Ok(Rect::around(&model["model"][quad]))
+    Ok(around(&model["model"][quad]))
+}
+
+/// The box around one quad of a `DOM.getBoxModel` reply.
+fn around(quad: &Value) -> Option<Rect> {
+    let quad: Vec<f64> = quad.as_array().into_iter().flatten().filter_map(Value::as_f64).collect();
+    if quad.len() < 8 {
+        return None;
+    }
+    let xs = [quad[0], quad[2], quad[4], quad[6]];
+    let ys = [quad[1], quad[3], quad[5], quad[7]];
+    let left = xs.iter().copied().fold(f64::MAX, f64::min);
+    let top = ys.iter().copied().fold(f64::MAX, f64::min);
+    let right = xs.iter().copied().fold(f64::MIN, f64::max);
+    let bottom = ys.iter().copied().fold(f64::MIN, f64::max);
+    Some(Rect { left, top, width: right - left, height: bottom - top })
 }
 
 /// What a picture covers: the viewport, the whole page, or one box in

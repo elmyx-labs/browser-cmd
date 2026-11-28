@@ -24,11 +24,13 @@ const VERSION_BYTES: usize = 64 * 1024;
 /// nothing under load; then anything named chrome on `PATH`; then, on macOS,
 /// wherever Spotlight says a bundle is, for an install somewhere unusual.
 fn preferred_stable_chrome() -> Option<PathBuf> {
-    standard_locations()
-        .into_iter()
-        .chain(on_path("chrome"))
-        .chain(spotlight_bundles())
-        .find(is_stable_chrome)
+    candidates("chrome").find(is_stable_chrome)
+}
+
+/// Every browser that may be Chrome, in the order they are tried; `named` is
+/// what one on `PATH` is called.
+fn candidates(named: &str) -> impl Iterator<Item = PathBuf> {
+    standard_locations().into_iter().chain(on_path(named)).chain(spotlight_bundles())
 }
 
 /// The Chrome a launch uses: the one `named`, else the stable one found here,
@@ -50,12 +52,8 @@ pub(crate) fn chrome_to_launch(named: Option<&Path>) -> Result<PathBuf> {
 /// The browsers found here that are not a stable Google Chrome — Chromium, a
 /// Beta, a "for Testing" build.
 fn passed_over() -> Vec<PathBuf> {
-    let mut found: Vec<PathBuf> = standard_locations()
-        .into_iter()
-        .chain(on_path("chrom"))
-        .chain(spotlight_bundles())
-        .filter(|candidate| candidate.is_file() && !is_stable_chrome(candidate))
-        .collect();
+    let mut found: Vec<PathBuf> =
+        candidates("chrom").filter(|candidate| candidate.is_file() && !is_stable_chrome(candidate)).collect();
     found.sort();
     found.dedup();
     found
@@ -152,7 +150,7 @@ pub(crate) const ENDPOINT: &str = "browser-cmd-endpoint";
 /// runs. The note outlives a Chrome that was killed, and its port may by now
 /// be another browser's: the endpoint carries an id no other Chrome has, so
 /// only the very one that was launched answers to it.
-pub(crate) async fn active_port(profile: &Path, patience: Duration) -> Option<String> {
+pub(crate) async fn active_endpoint(profile: &Path, patience: Duration) -> Option<String> {
     let noted = std::fs::read_to_string(profile.join(ENDPOINT)).ok()?;
     let port = url::Url::parse(noted.trim()).ok()?.port()?;
     let answers = debugger_url(&format!("http://127.0.0.1:{port}"), patience).await.ok()?;

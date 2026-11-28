@@ -194,10 +194,15 @@ mod tests {
         assert_eq!(recorded_in(home.path()).as_deref(), Some(address.as_str()));
         let second = listen_default(home.path(), &usual).await;
         assert!(second.is_err_and(|error| error.to_string().contains(&address)), "one default daemon a user");
-        drop((listener, lock));
-        assert_eq!(recorded_in(home.path()), None, "an address whose daemon is gone is no address");
-        drop(other);
-        let (listener, _lock) = listen_default(home.path(), &usual).await.unwrap();
+        drop((listener, lock, other));
+        // Released locks are checked in homes of their own: a child another test forks in this process holds
+        // what it inherited until it execs, so a lock just let go may still look held for a moment here.
+        let left = tempfile::tempdir().unwrap();
+        std::fs::write(left.path().join("daemon.addr"), &address).unwrap();
+        std::fs::write(left.path().join("daemon.lock"), "").unwrap();
+        assert_eq!(recorded_in(left.path()), None, "an address whose daemon is gone is no address");
+        let free = tempfile::tempdir().unwrap();
+        let (listener, _lock) = listen_default(free.path(), &usual).await.unwrap();
         assert_eq!(listener.local_addr().unwrap().to_string(), usual, "a free usual port is taken");
     }
 }

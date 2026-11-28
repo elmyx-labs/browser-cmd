@@ -69,12 +69,7 @@ pub(super) fn is_interactive(node: &Value, role: &str) -> bool {
     if INTERACTIVE_ROLES.contains(&role) {
         return true;
     }
-    node["properties"].as_array().is_some_and(|properties| {
-        properties.iter().any(|property| {
-            matches!(property["name"].as_str(), Some("focusable" | "settable"))
-                && ax_text(&property["value"]) == "true"
-        })
-    })
+    has_property(node, "focusable", "true") || has_property(node, "settable", "true")
 }
 
 pub(super) fn ax_text(value: &Value) -> String {

@@ -1,10 +1,7 @@
 function (spec) {
-  const value = (node, part) => {
+  const value = (node, attribute) => {
     if (!node) return null;
-    const at = part.indexOf("@");
-    const attribute = at < 0 ? null : part.slice(at + 1);
-    if (!attribute) return (node.innerText || node.textContent || "").trim();
-    if (attribute === "text") return (node.innerText || node.textContent || "").trim();
+    if (!attribute || attribute === "text") return (node.innerText || node.textContent || "").trim();
     if (attribute === "value") return node.value ?? null;
     if (attribute === "href" || attribute === "src") return node[attribute] ?? null;
     return node.getAttribute(attribute);
@@ -28,7 +25,7 @@ function (spec) {
           ? base
           : base.matches?.(selector) ? base : base.querySelector(selector);
       }
-      out[name] = value(node, part);
+      out[name] = value(node, at < 0 ? null : part.slice(at + 1));
     }
     return out;
   };

@@ -154,8 +154,7 @@ pub(crate) async fn dispatch_keystroke(tab: &Tab, hand: &mut Hand, down: Value) 
         hand.hold_key().await;
         let released = tab.call("Input.dispatchKeyEvent", up).await;
         key_result?;
-        released?;
-        Ok(())
+        released.map(drop)
     }
     .await;
     let mut release_error = None;
@@ -168,10 +167,7 @@ pub(crate) async fn dispatch_keystroke(tab: &Tab, hand: &mut Hand, down: Value) 
         }
     }
     result?;
-    match release_error {
-        Some(error) => Err(error),
-        None => Ok(()),
-    }
+    release_error.map_or(Ok(()), Err)
 }
 
 pub(crate) fn parse_key(requested: &str) -> Result<(i64, String)> {

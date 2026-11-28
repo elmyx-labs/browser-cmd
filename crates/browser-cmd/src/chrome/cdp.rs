@@ -113,11 +113,7 @@ impl Cdp {
                 let Ok(message) = serde_json::from_str::<Value>(&text) else { continue };
                 for reply in recorded.lock().unwrap().apply(&message, dialogs) {
                     let id = counter.fetch_add(1, Ordering::Relaxed);
-                    let mut command = json!({ "id": id, "method": reply.method, "params": reply.params });
-                    if let Some(session) = reply.session {
-                        command["sessionId"] = session.into();
-                    }
-                    let line = command.to_string();
+                    let line = frame(id, reply.session.as_deref(), &reply.method, reply.params).to_string();
                     if reply.after.is_zero() {
                         let _ = sender.send(line);
                         continue;
@@ -303,11 +299,7 @@ impl Cdp {
 
     fn message(&self, session: Option<&str>, method: &str, params: Value) -> (u64, Value) {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        let mut message = json!({ "id": id, "method": method, "params": params });
-        if let Some(session) = session {
-            message["sessionId"] = Value::String(session.to_owned());
-        }
-        (id, message)
+        (id, frame(id, session, method, params))
     }
 
     /// Send one command, to the browser or to one attached tab, and wait for its answer.
@@ -438,6 +430,15 @@ impl Resource<'_> {
             Self::Context(id) => cdp.contexts().await?.0.iter().any(|context| context == id),
         })
     }
+}
+
+/// One command as the wire carries it, to the browser or to one attached tab.
+fn frame(id: u64, session: Option<&str>, method: &str, params: Value) -> Value {
+    let mut message = json!({ "id": id, "method": method, "params": params });
+    if let Some(session) = session {
+        message["sessionId"] = Value::String(session.to_owned());
+    }
+    message
 }
 
 #[cfg(test)]
