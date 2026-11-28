@@ -63,7 +63,9 @@ pub(crate) async fn scroll(session: &mut Session, args: Value) -> Result<String>
         _ => String::new(),
     };
     let moved = travelled(&before, &reached, direction);
-    after(session, &tab, &format!("Scrolled {direction} {amount} px{over}. {moved}")).await
+    // `after` ends the line with its own full stop.
+    after(session, &tab, &format!("Scrolled {direction} {amount} px{over}. {}", moved.trim_end_matches('.')))
+        .await
 }
 
 /// So a feed is collected in one call instead of a guessed number of scrolls.
@@ -157,9 +159,13 @@ fn travelled(before: &Value, after: &Value, direction: &str) -> String {
             );
             let what = if after["kind"] == "region" { "This region" } else { "The page" };
             let ends = |place: &str| format!("{what} did not move: it is already at the {place}.");
+            // A page too short to scroll is at both ends: it is said to be at the one the wheel turned toward.
+            let forward = matches!(direction, "down" | "right");
             match (now - was, now, reach) {
+                (0.0, at, reach) if at >= reach && (forward || reach > 0.0) => {
+                    ends(if sideways { "right" } else { "bottom" })
+                }
                 (0.0, at, _) if at <= 0.0 => ends(if sideways { "left" } else { "top" }),
-                (0.0, at, reach) if at >= reach => ends(if sideways { "right" } else { "bottom" }),
                 (0.0, ..) => format!("{what} did not move."),
                 (by, at, reach) => {
                     format!("{what} moved {by:.0} px, and is at {at:.0} of {reach:.0}.")

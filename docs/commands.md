@@ -141,10 +141,10 @@ Press a key or chord such as Enter, Escape, Tab, PageDown, ArrowDown, Control+a 
 ### scroll
 
 ```
-browser-cmd scroll [@ref] [up|down|left|right|bottom|top|TEXT]
+browser-cmd scroll [@ref | X,Y] [up|down|left|right|bottom|top|TEXT] [amount=PX]
 ```
 
-Turn the wheel over the page, or scroll to an edge until the page stops growing — which loads a whole infinite list in one call. Any other text brings the first element bearing it into view. With a ref and no direction it scrolls that element into view; with a ref and a direction it scrolls whatever that ref sits in, which is how a chat or a sidebar is reached.
+Turn the wheel over the page, or scroll to an edge until the page stops growing — which loads a whole infinite list in one call. Any other text brings the first element bearing it into view. With a ref and no direction it scrolls that element into view; with a ref and a direction it scrolls whatever that ref sits in, which is how a chat or a sidebar is reached. X,Y turns the wheel over that point of the viewport, for a map or a canvas with no ref; amount=PX is how far (700 by default, at most 5000).
 
 ### text
 
@@ -208,7 +208,7 @@ Which of the given strings are visible in the viewport now, and where: x,y and t
 browser-cmd wait [SECONDS | TEXT] [gone=TEXT] [url=TEXT]
 ```
 
-Wait for a page that draws itself: until text appears, until text disappears, until the URL contains a string, or for a number of seconds and the DOM to go quiet.
+Wait for a page that draws itself: until text appears, until text disappears, until the URL contains a string, or for a number of seconds and the DOM to go quiet; at most 90 s.
 
 ### verify
 

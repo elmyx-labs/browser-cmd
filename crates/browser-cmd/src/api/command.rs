@@ -221,15 +221,22 @@ pub const CATALOGUE: &[Command] = &[
     },
     Command {
         name: "scroll",
-        usage: "[@ref] [up|down|left|right|bottom|top|TEXT]",
+        usage: "[@ref | X,Y] [up|down|left|right|bottom|top|TEXT] [amount=PX]",
         about: "Turn the wheel over the page, or scroll to an edge until the page stops growing — which \
                 loads a whole infinite list in one call. Any other text brings the first element bearing \
                 it into view. With a ref and no direction it scrolls that element into view; with a ref \
                 and a direction it scrolls whatever that ref sits in, which is how a chat or a sidebar \
-                is reached.",
+                is reached. X,Y turns the wheel over that point of the viewport, for a map or a canvas \
+                with no ref; amount=PX is how far (700 by default, at most 5000).",
         parse: |rest| {
             let mut words = rest.to_vec();
+            let amount = words.iter().position(|word| word.starts_with("amount=")).map(|at| words.remove(at));
             let handle = words.iter().position(|word| word.starts_with('@')).map(|at| words.remove(at));
+            // A point leads, as the usage line puts it, so text with a comma in it stays text.
+            let point = words.first().map(|word| spot(word)).filter(|target| target.get("x").is_some());
+            if point.is_some() {
+                words.remove(0);
+            }
             let mut args = match words.first().map(String::as_str) {
                 None => json!({}),
                 Some(edge @ ("bottom" | "top")) => json!({ "to": edge }),
@@ -238,6 +245,15 @@ pub const CATALOGUE: &[Command] = &[
             };
             if let Some(handle) = handle {
                 args["ref"] = json!(handle);
+            }
+            for (key, value) in point.as_ref().and_then(Value::as_object).into_iter().flatten() {
+                args[key] = value.clone();
+            }
+            if let Some(amount) = amount {
+                let pixels = amount["amount=".len()..]
+                    .parse::<u32>()
+                    .map_err(|_| Error::Config("scroll amount must be a whole number of pixels".into()))?;
+                args["amount"] = json!(pixels);
             }
             Ok(args)
         },
@@ -371,7 +387,7 @@ pub const CATALOGUE: &[Command] = &[
         name: "wait",
         usage: "[SECONDS | TEXT] [gone=TEXT] [url=TEXT]",
         about: "Wait for a page that draws itself: until text appears, until text disappears, until the \
-                URL contains a string, or for a number of seconds and the DOM to go quiet.",
+                URL contains a string, or for a number of seconds and the DOM to go quiet; at most 90 s.",
         parse: |rest| match rest.first() {
             None => Ok(json!({})),
             Some(word) if word.contains('=') => pairs(rest),
@@ -695,6 +711,16 @@ mod tests {
         };
         assert_eq!(scroll(&["@e1a.3"]).unwrap(), json!({"ref":"@e1a.3"}));
         assert_eq!(scroll(&["@e1a.3", "down"]).unwrap(), json!({"ref":"@e1a.3", "direction":"down"}));
+        assert_eq!(
+            scroll(&["640,300", "up", "amount=1500"]).unwrap(),
+            json!({"x":640.0, "y":300.0, "direction":"up", "amount":1500})
+        );
+        assert_eq!(
+            scroll(&["HUF 331,201"]).unwrap(),
+            json!({"to":"HUF 331,201"}),
+            "text with a comma is text"
+        );
+        assert!(scroll(&["down", "amount=far"]).is_err());
         assert_eq!(scroll(&["bottom", "@e1a.3"]).unwrap(), json!({"ref":"@e1a.3", "to":"bottom"}));
         assert_eq!(scroll(&["Drop", "here"]).unwrap(), json!({"to":"Drop here"}));
         assert_eq!(scroll(&[]).unwrap(), json!({}));

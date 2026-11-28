@@ -121,7 +121,7 @@ pub(crate) async fn wait(session: &mut Session, args: Value) -> Result<String> {
         .min(WAIT_CAP);
     let tab = session.current().await?;
     if args.text.is_none() && args.gone.is_none() && args.url.is_none() {
-        tokio::time::sleep(limit.min(session.settings().waits.wait)).await;
+        tokio::time::sleep(limit).await;
         return after(session, &tab, "Waited").await;
     }
     let host = session.host.clone();
